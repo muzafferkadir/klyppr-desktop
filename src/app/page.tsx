@@ -4,6 +4,9 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { translations } from '@/locales/translations';
 import { FFmpegService, SilentSegment } from '@/services/ffmpeg';
 
+// Initialize FFmpegService
+const ffmpegService = FFmpegService.getInstance();
+
 export default function Home() {
   const [video, setVideo] = useState<File | null>(null);
   const [silentSegments, setSilentSegments] = useState<SilentSegment[]>([]);
@@ -194,30 +197,24 @@ export default function Home() {
       setProgress(0);
       setLogs([t.trimmingSilence]);
 
-      console.log('Starting silence trimming for file:', video);
+      // Set up progress listener before starting the operation
+      window.electron.onProgress((progress: number) => {
+        console.log('Progress in UI:', progress);
+        setProgress(progress);
+      });
+
       const filePath = (video as any).path;
       if (!filePath) {
         throw new Error('Could not get file path');
       }
 
-      // Setup progress listener
-      window.electron.onProgress((progress) => {
-        setProgress(progress);
-      });
-
-      const outputPath = await window.electron.trimSilence({
-        filePath,
-        segments: silentSegments,
-        padding
-      });
+      const outputPath = await ffmpegService.trimSilence(filePath, silentSegments);
       console.log('Output path:', outputPath);
-
-      setLogs(prev => [...prev, t.trimComplete]);
       
       // Open the file using Electron's shell
-      const cleanPath = outputPath.replace('file://', '');
-      await window.electron.openFile(cleanPath);
-
+      await window.electron.openFile(outputPath);
+      
+      setLogs(prev => [...prev, t.trimComplete]);
     } catch (err) {
       const error = err as Error;
       console.error('Trimming error:', error);

@@ -1,26 +1,61 @@
 import ffmpeg from 'fluent-ffmpeg';
-import { ipcMain, app } from 'electron';
+import { ipcMain, app, BrowserWindow } from 'electron';
 import { join, dirname } from 'path';
 import { tmpdir } from 'os';
 import { mkdirSync, existsSync } from 'fs';
 import { EventEmitter } from 'events';
+
+// Add type declarations for fluent-ffmpeg
+declare module 'fluent-ffmpeg' {
+  interface FfmpegCommand {
+    on(event: 'start', callback: (command: string) => void): FfmpegCommand;
+    on(event: 'codecData', callback: (data: FFmpegCodecData) => void): FfmpegCommand;
+    on(event: 'progress', callback: (progress: FFmpegProgress) => void): FfmpegCommand;
+    on(event: 'end', callback: () => void): FfmpegCommand;
+    on(event: 'error', callback: (err: Error) => void): FfmpegCommand;
+    on(event: 'stderr', callback: (stderrLine: string) => void): FfmpegCommand;
+  }
+}
 
 export interface SilentSegment {
   start: number;
   end: number;
 }
 
-class FFmpegService extends EventEmitter {
-  private static instance: FFmpegService;
+// Add type definition for FFmpeg progress data
+interface FFmpegProgress {
+  frames: number;
+  currentFps: number;
+  currentKbps: number;
+  targetSize: number;
+  timemark: string;
+  percent: number;
+}
 
-  private constructor() {
+// Add type definition for FFmpeg codec data
+interface FFmpegCodecData {
+  format: string;
+  audio: string;
+  audio_details: string[];
+  video: string;
+  video_details: string[];
+  duration: string;
+  frames?: string;
+}
+
+export class FFmpegService extends EventEmitter {
+  private static instance: FFmpegService;
+  private mainWindow: BrowserWindow;
+
+  private constructor(mainWindow: BrowserWindow) {
     super();
+    this.mainWindow = mainWindow;
     this.setupIpcHandlers();
   }
 
-  public static getInstance(): FFmpegService {
-    if (!FFmpegService.instance) {
-      FFmpegService.instance = new FFmpegService();
+  public static getInstance(mainWindow?: BrowserWindow): FFmpegService {
+    if (!FFmpegService.instance && mainWindow) {
+      FFmpegService.instance = new FFmpegService(mainWindow);
     }
     return FFmpegService.instance;
   }
@@ -45,7 +80,7 @@ class FFmpegService extends EventEmitter {
     });
   }
 
-  private detectSilence(
+  public async detectSilence(
     inputPath: string,
     threshold: number = -45,
     minDuration: number = 0.6
@@ -120,7 +155,7 @@ class FFmpegService extends EventEmitter {
     return nonSilentSegments;
   }
 
-  private getOutputPath(): string {
+  private getOutputPath(filePath: string): string {
     const timestamp = Date.now();
     const platform = process.platform;
     let outputPath: string;
@@ -148,82 +183,93 @@ class FFmpegService extends EventEmitter {
     return outputPath;
   }
 
-  async trimSilence(filePath: string, segments: SilentSegment[], padding: number = 0.05): Promise<string> {
-    if (!segments || segments.length === 0) {
+  public async trimSilence(
+    filePath: string,
+    silentSegments: SilentSegment[],
+    padding: number = 0.05
+  ): Promise<string> {
+    if (!silentSegments || silentSegments.length === 0) {
       throw new Error('No segments provided');
     }
 
-    const outputPath = this.getOutputPath();
-    console.log('Output path:', outputPath);
-
-    // Get non-silent segments with padding
-    const nonSilentSegments = await this.getNonSilentSegments(segments, filePath, padding);
+    // Get non-silent segments
+    const nonSilentSegments = await this.getNonSilentSegments(silentSegments, filePath, padding);
     if (nonSilentSegments.length === 0) {
       throw new Error('No non-silent segments found');
     }
 
-    // Create filter complex command
-    const filters = nonSilentSegments.map((segment, i) => {
-      return `[0:v]trim=start=${segment.start}:end=${segment.end},setpts=PTS-STARTPTS[v${i}];` +
-             `[0:a]atrim=start=${segment.start}:end=${segment.end},asetpts=PTS-STARTPTS[a${i}]`;
-    });
+    const outputPath = this.getOutputPath(filePath);
+    console.log('Output path:', outputPath);
 
-    const concatVideo = nonSilentSegments.map((_, i) => `[v${i}]`).join('');
-    const concatAudio = nonSilentSegments.map((_, i) => `[a${i}]`).join('');
-    
-    filters.push(
-      `${concatVideo}concat=n=${nonSilentSegments.length}:v=1:a=0[vout]`,
-      `${concatAudio}concat=n=${nonSilentSegments.length}:v=0:a=1[aout]`
-    );
+    // Ensure output directory exists
+    const dir = dirname(outputPath);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
 
     return new Promise((resolve, reject) => {
       let totalFrames = 0;
       let processedFrames = 0;
 
+      // Create filter complex command
+      const filters: string[] = [];
+      
+      // Add segment filters for non-silent parts
+      nonSilentSegments.forEach((segment, i) => {
+        filters.push(
+          `[0:v]trim=start=${segment.start}:end=${segment.end},setpts=PTS-STARTPTS[v${i}]`,
+          `[0:a]atrim=start=${segment.start}:end=${segment.end},asetpts=PTS-STARTPTS[a${i}]`
+        );
+      });
+
+      // Add concat filters
+      const videoInputs = nonSilentSegments.map((_, i) => `[v${i}]`).join('');
+      const audioInputs = nonSilentSegments.map((_, i) => `[a${i}]`).join('');
+      
+      filters.push(
+        `${videoInputs}concat=n=${nonSilentSegments.length}:v=1:a=0[vout]`,
+        `${audioInputs}concat=n=${nonSilentSegments.length}:v=0:a=1[aout]`
+      );
+
+      console.log('Using non-silent segments:', nonSilentSegments);
+      console.log('Filter complex:', filters.join(';'));
+
       ffmpeg(filePath)
+        .on('start', (command) => {
+          console.log('FFmpeg command:', command);
+        })
+        .on('codecData', (data: FFmpegCodecData) => {
+          totalFrames = parseInt(data.frames || '1000');
+          console.log('Total frames:', totalFrames);
+        })
+        .on('progress', (progress: FFmpegProgress) => {
+          processedFrames = progress.frames || 0;
+          const percent = Math.min(Math.round((processedFrames / totalFrames) * 100), 100);
+          console.log('Progress:', percent + '%');
+          if (this.mainWindow?.webContents) {
+            this.mainWindow.webContents.send('progress', percent);
+          }
+        })
+        .on('end', () => {
+          console.log('Trimming complete');
+          resolve(outputPath);
+        })
+        .on('error', (err) => {
+          console.error('FFmpeg error:', err);
+          reject(err);
+        })
+        .complexFilter(filters)
         .outputOptions([
           '-map', '[vout]',
           '-map', '[aout]',
           '-c:v', 'libx264',
           '-preset', 'fast',
+          '-c:a', 'aac',
+          '-b:a', '192k',
+          '-movflags', '+faststart',
           '-y'
         ])
-        .complexFilter(filters.join(';'))
-        .on('start', (cmd) => {
-          console.log('Started ffmpeg with command:', cmd);
-        })
-        .on('stderr', (stderrLine) => {
-          console.log('Stderr output:', stderrLine);
-          
-          // Parse total frames
-          const durationMatch = stderrLine.match(/Duration: (\d{2}):(\d{2}):(\d{2})/);
-          if (durationMatch) {
-            const hours = parseInt(durationMatch[1]);
-            const minutes = parseInt(durationMatch[2]);
-            const seconds = parseInt(durationMatch[3]);
-            totalFrames = (hours * 3600 + minutes * 60 + seconds) * 30; // Assuming 30fps
-          }
-
-          // Parse current frame
-          const frameMatch = stderrLine.match(/frame=\s*(\d+)/);
-          if (frameMatch && totalFrames > 0) {
-            processedFrames = parseInt(frameMatch[1]);
-            const progress = (processedFrames / totalFrames) * 100;
-            // Emit progress event
-            this.emit('progress', Math.min(progress, 100));
-          }
-        })
-        .on('error', (err) => {
-          console.error('Error:', err);
-          reject(err);
-        })
-        .on('end', () => {
-          const fileUrl = new URL(`file://${outputPath}`).href;
-          resolve(fileUrl);
-        })
         .save(outputPath);
     });
   }
-}
-
-export const ffmpegService = FFmpegService.getInstance(); 
+} 
