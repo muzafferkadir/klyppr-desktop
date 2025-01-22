@@ -6,18 +6,17 @@ import { FFmpegService } from './ffmpeg';
 let mainWindow: BrowserWindow | null = null;
 let ffmpegService: FFmpegService | null = null;
 
-// Register IPC handlers
-ipcMain.handle('open-file', async (_, filePath: string) => {
-  try {
-    await shell.openPath(filePath.replace('file://', ''));
-    return true;
-  } catch (error) {
-    console.error('Error opening file:', error);
-    return false;
-  }
-});
+// Clean up existing IPC handlers
+function cleanupIpcHandlers() {
+  ipcMain.removeHandler('detect-silence');
+  ipcMain.removeHandler('trim-silence');
+  ipcMain.removeHandler('open-file');
+}
 
 function createWindow() {
+  // Cleanup existing handlers before creating new ones
+  cleanupIpcHandlers();
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 720,
@@ -28,15 +27,38 @@ function createWindow() {
     },
   });
 
-  const url = isDev
-    ? 'http://localhost:3000'
-    : `file://${join(__dirname, '../index.html')}`;
+  // Register IPC handlers
+  ipcMain.handle('open-file', async (_, filePath: string) => {
+    try {
+      await shell.openPath(filePath.replace('file://', ''));
+      return true;
+    } catch (error) {
+      console.error('Error opening file:', error);
+      return false;
+    }
+  });
 
-  mainWindow.loadURL(url);
+  const appPath = app.getAppPath();
+  console.log('App Path:', appPath);
+  console.log('__dirname:', __dirname);
 
+  let url: string;
   if (isDev) {
+    url = 'http://localhost:3000';
+    // Only open DevTools in development
     mainWindow.webContents.openDevTools();
+  } else {
+    // In production, use the bundled renderer
+    const rendererPath = join(process.resourcesPath, 'renderer/index.html');
+    console.log('Renderer path:', rendererPath);
+    url = `file://${rendererPath}`;
   }
+
+  console.log('Loading URL:', url);
+
+  mainWindow.loadURL(url).catch((err) => {
+    console.error('Failed to load URL:', err);
+  });
 
   // Initialize FFmpeg service after window creation
   if (mainWindow) {
@@ -67,6 +89,8 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    // Cleanup handlers when window is closed
+    cleanupIpcHandlers();
   });
 }
 

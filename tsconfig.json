@@ -33,7 +33,8 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    "dist/renderer/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

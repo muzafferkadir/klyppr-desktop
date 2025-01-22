@@ -1,9 +1,10 @@
 import ffmpeg from 'fluent-ffmpeg';
-import { ipcMain, app, BrowserWindow } from 'electron';
-import { join, dirname } from 'path';
+import { ipcMain, app, BrowserWindow, dialog } from 'electron';
+import { join, dirname, parse } from 'path';
 import { tmpdir } from 'os';
 import { mkdirSync, existsSync } from 'fs';
 import { EventEmitter } from 'events';
+import isDev from 'electron-is-dev';
 
 // Add type declarations for fluent-ffmpeg
 declare module 'fluent-ffmpeg' {
@@ -24,23 +25,36 @@ export interface SilentSegment {
 
 // Add type definition for FFmpeg progress data
 interface FFmpegProgress {
-  frames: number;
-  currentFps: number;
-  currentKbps: number;
-  targetSize: number;
-  timemark: string;
-  percent: number;
+  frames?: number;
+  currentFps?: number;
+  currentKbps?: number;
+  targetSize?: number;
+  timemark?: string;
+  percent?: number;
 }
 
 // Add type definition for FFmpeg codec data
 interface FFmpegCodecData {
-  format: string;
-  audio: string;
-  audio_details: string[];
-  video: string;
-  video_details: string[];
-  duration: string;
+  format: {
+    duration?: number;
+    size?: string;
+    bit_rate?: string;
+    filename?: string;
+  };
+  streams?: Array<{
+    codec_type?: string;
+    codec_name?: string;
+    width?: number;
+    height?: number;
+    duration?: string;
+    nb_frames?: string;
+  }>;
   frames?: string;
+  audio?: string;
+  audio_details?: string[];
+  video?: string;
+  video_details?: string[];
+  duration?: string;
 }
 
 export class FFmpegService extends EventEmitter {
@@ -51,6 +65,7 @@ export class FFmpegService extends EventEmitter {
     super();
     this.mainWindow = mainWindow;
     this.setupIpcHandlers();
+    this.setupFFmpegPath();
   }
 
   public static getInstance(mainWindow?: BrowserWindow): FFmpegService {
@@ -78,6 +93,50 @@ export class FFmpegService extends EventEmitter {
         throw error;
       }
     });
+  }
+
+  private setupFFmpegPath() {
+    const platform = process.platform;
+    let ffmpegPath: string;
+    let ffprobePath: string;
+
+    if (isDev) {
+      // In development, use the binaries from public folder
+      ffmpegPath = join(process.cwd(), 'public', 'ffmpeg');
+      ffprobePath = join(process.cwd(), 'public', 'ffprobe');
+    } else {
+      // In production, use the bundled binaries from resources
+      ffmpegPath = join(process.resourcesPath, 'ffmpeg');
+      ffprobePath = join(process.resourcesPath, 'ffprobe');
+    }
+
+    // Add executable permission in production
+    if (!isDev && platform !== 'win32') {
+      require('child_process').execSync(`chmod +x "${ffmpegPath}"`);
+      require('child_process').execSync(`chmod +x "${ffprobePath}"`);
+    }
+
+    console.log('Setting FFmpeg path:', ffmpegPath);
+    console.log('Setting FFprobe path:', ffprobePath);
+
+    ffmpeg.setFfmpegPath(ffmpegPath);
+    ffmpeg.setFfprobePath(ffprobePath);
+  }
+
+  private async getSaveFilePath(originalPath: string): Promise<string | null> {
+    const { name } = parse(originalPath);
+    const defaultPath = join(app.getPath('downloads'), `${name}_trimmed.mp4`);
+    
+    const result = await dialog.showSaveDialog(this.mainWindow, {
+      title: 'Save Trimmed Video',
+      defaultPath: defaultPath,
+      filters: [
+        { name: 'MP4 Video', extensions: ['mp4'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+
+    return result.canceled ? null : result.filePath;
   }
 
   public async detectSilence(
@@ -155,34 +214,6 @@ export class FFmpegService extends EventEmitter {
     return nonSilentSegments;
   }
 
-  private getOutputPath(filePath: string): string {
-    const timestamp = Date.now();
-    const platform = process.platform;
-    let outputPath: string;
-
-    switch (platform) {
-      case 'darwin':
-        // macOS: Downloads folder
-        outputPath = join(app.getPath('downloads'), `trimmed_${timestamp}.mp4`);
-        break;
-      case 'win32':
-        // Windows: Videos folder
-        outputPath = join(app.getPath('videos'), `trimmed_${timestamp}.mp4`);
-        break;
-      default:
-        // Linux and others: Downloads folder
-        outputPath = join(app.getPath('downloads'), `trimmed_${timestamp}.mp4`);
-    }
-
-    // Ensure the directory exists
-    const dir = dirname(outputPath);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-
-    return outputPath;
-  }
-
   public async trimSilence(
     filePath: string,
     silentSegments: SilentSegment[],
@@ -198,8 +229,11 @@ export class FFmpegService extends EventEmitter {
       throw new Error('No non-silent segments found');
     }
 
-    const outputPath = this.getOutputPath(filePath);
-    console.log('Output path:', outputPath);
+    // Get save path from user
+    const outputPath = await this.getSaveFilePath(filePath);
+    if (!outputPath) {
+      throw new Error('Operation cancelled by user');
+    }
 
     // Ensure output directory exists
     const dir = dirname(outputPath);
@@ -208,7 +242,7 @@ export class FFmpegService extends EventEmitter {
     }
 
     return new Promise((resolve, reject) => {
-      let totalFrames = 0;
+      let totalFrames = 1000; // Default value
       let processedFrames = 0;
 
       // Create filter complex command
@@ -231,44 +265,30 @@ export class FFmpegService extends EventEmitter {
         `${audioInputs}concat=n=${nonSilentSegments.length}:v=0:a=1[aout]`
       );
 
-      console.log('Using non-silent segments:', nonSilentSegments);
-      console.log('Filter complex:', filters.join(';'));
-
       ffmpeg(filePath)
         .on('start', (command) => {
           console.log('FFmpeg command:', command);
         })
         .on('codecData', (data: FFmpegCodecData) => {
-          totalFrames = parseInt(data.frames || '1000');
-          console.log('Total frames:', totalFrames);
+          // Try to get frames from different possible locations
+          const frames = data.frames || 
+                        data.streams?.[0]?.nb_frames || 
+                        '1000';
+          totalFrames = parseInt(frames, 10);
         })
         .on('progress', (progress: FFmpegProgress) => {
           processedFrames = progress.frames || 0;
           const percent = Math.min(Math.round((processedFrames / totalFrames) * 100), 100);
-          console.log('Progress:', percent + '%');
-          if (this.mainWindow?.webContents) {
-            this.mainWindow.webContents.send('progress', percent);
-          }
-        })
-        .on('end', () => {
-          console.log('Trimming complete');
-          resolve(outputPath);
+          this.emit('progress', percent);
         })
         .on('error', (err) => {
-          console.error('FFmpeg error:', err);
+          console.error('Error during processing:', err);
           reject(err);
         })
-        .complexFilter(filters)
-        .outputOptions([
-          '-map', '[vout]',
-          '-map', '[aout]',
-          '-c:v', 'libx264',
-          '-preset', 'fast',
-          '-c:a', 'aac',
-          '-b:a', '192k',
-          '-movflags', '+faststart',
-          '-y'
-        ])
+        .on('end', () => {
+          resolve(outputPath);
+        })
+        .complexFilter(filters, ['vout', 'aout'])
         .save(outputPath);
     });
   }
