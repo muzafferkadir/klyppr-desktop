@@ -1,27 +1,27 @@
-import { app, BrowserWindow } from 'electron';
-import * as path from 'path';
-import * as isDev from 'electron-is-dev';
+import { app, BrowserWindow, protocol, ipcMain, shell } from 'electron';
+import { join } from 'path';
+import isDev from 'electron-is-dev';
+import './ffmpeg'; // Initialize FFmpeg service
 
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: 1280,
+    height: 720,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: join(__dirname, 'preload.js')
     },
   });
 
-  // Development modunda localhost:3000'i yükle, production'da build edilmiş dosyaları yükle
-  const startURL = isDev
+  const url = isDev
     ? 'http://localhost:3000'
-    : `file://${path.join(__dirname, '../.next/server/pages/index.html')}`;
+    : `file://${join(__dirname, '../index.html')}`;
 
-  mainWindow.loadURL(startURL);
+  mainWindow.loadURL(url);
 
-  // DevTools'u development modunda aç
   if (isDev) {
     mainWindow.webContents.openDevTools();
   }
@@ -31,16 +31,31 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow);
+// Register protocol and create window
+app.whenReady().then(() => {
+  // Register file protocol
+  protocol.registerFileProtocol('local-file', (request, callback) => {
+    const filePath = request.url.replace('local-file://', '');
+    callback(decodeURI(filePath));
+  });
+
+  createWindow();
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
+});
+
+// Handle file opening
+ipcMain.handle('open-file', async (_, filePath) => {
+  await shell.openPath(filePath);
+  return true;
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
-  }
-});
-
-app.on('activate', () => {
-  if (mainWindow === null) {
-    createWindow();
   }
 }); 

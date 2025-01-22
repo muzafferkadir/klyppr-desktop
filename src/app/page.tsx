@@ -1,25 +1,20 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { toBlobURL, fetchFile } from '@ffmpeg/util';
 import { translations } from '@/locales/translations';
+import { FFmpegService, SilentSegment } from '@/services/ffmpeg';
 
 export default function Home() {
   const [video, setVideo] = useState<File | null>(null);
-  const [silentSegments, setSilentSegments] = useState<{ start: number; end: number }[]>([]);
+  const [silentSegments, setSilentSegments] = useState<SilentSegment[]>([]);
   const [progress, setProgress] = useState(0);
   const [processing, setProcessing] = useState(false);
-  const [loaded, setLoaded] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [threshold, setThreshold] = useState(-45);
   const [minDuration, setMinDuration] = useState(0.6);
   const [padding, setPadding] = useState(0.05);
   const [videoDuration, setVideoDuration] = useState(0);
   const [previewUrl, setPreviewUrl] = useState<string>('');
-  const silenceLogsRef = useRef<string[]>([]);
-  const ffmpegRef = useRef<FFmpeg | null>(null);
-  const isDetectingRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [isSegmentsOpen, setIsSegmentsOpen] = useState(false);
@@ -33,7 +28,6 @@ export default function Home() {
     detection: number;
     trimming: number;
   }>({ detection: 0, trimming: 0 });
-  const [isFFmpegLoading, setIsFFmpegLoading] = useState(true);
   const [systemMetrics, setSystemMetrics] = useState<{
     cpu: number;
     memory: number;
@@ -48,79 +42,25 @@ export default function Home() {
     processedSize: 0
   });
 
-  const load = async () => {
-    if (typeof window === 'undefined') return;
-    
-    try {
-      setIsFFmpegLoading(true);
-      if (!ffmpegRef.current) {
-        const ffmpeg = new FFmpeg();
-        ffmpegRef.current = ffmpeg;
-
-        // Log handler
-        ffmpeg.on('log', ({ message }) => {
-          if (isDetectingRef.current && message.includes('silence_')) {
-            silenceLogsRef.current.push(message);
-            console.log('Silence detection:', message);
-          }
-          setLogs(prev => [...prev, message]);
-        });
-
-        // Progress handler
-        ffmpeg.on('progress', (event: any) => {
-          const ratio = event.ratio || event.progress || 0;
-          if (ratio >= 0 && ratio <= 1) {
-            setProgress(Math.round(ratio * 100));
-          }
-        });
-      
-        await ffmpeg.load({
-          coreURL: await toBlobURL('https://unpkg.com/@ffmpeg/core-mt@0.12.6/dist/umd/ffmpeg-core.js', 'text/javascript'),
-          wasmURL: await toBlobURL('https://unpkg.com/@ffmpeg/core-mt@0.12.6/dist/umd/ffmpeg-core.wasm', 'application/wasm'),
-          workerURL: await toBlobURL('https://unpkg.com/@ffmpeg/core-mt@0.12.6/dist/umd/ffmpeg-core.worker.js', 'text/javascript'),
-        });
-
-        setLoaded(true);
-        setLogs([t.ffmpegReady]);
-      }
-    } catch (err) {
-      const error = err as Error;
-      console.error(t.ffmpegError, error);
-      setLogs(prev => [...prev, `${t.error}${error.message}`]);
-    } finally {
-      setIsFFmpegLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-  }, []);
-
   // Performance test function
   const testPerformance = useCallback(async () => {
     try {
-      const memory = (navigator as any).deviceMemory || 4; // Default to 4GB if not available
-      const cores = navigator.hardwareConcurrency || 4; // Default to 4 cores if not available
+      const memory = (navigator as any).deviceMemory || 4;
+      const cores = navigator.hardwareConcurrency || 4;
       
-      // Base size is 100MB
       const baseSize = 100;
+      const memoryFactor = memory / 4;
+      const coreFactor = cores / 4;
       
-      // Adjust based on device capabilities
-      const memoryFactor = memory / 4; // Scale based on RAM (4GB as baseline)
-      const coreFactor = cores / 4; // Scale based on CPU cores (4 cores as baseline)
-      
-      // Calculate max file size (in MB)
       const calculatedSize = Math.floor(baseSize * Math.min(memoryFactor, coreFactor));
-      
-      // Set limits based on device capabilities
-      const maxSize = Math.min(Math.max(calculatedSize, 50), 500); // Between 50MB and 500MB
+      const maxSize = Math.min(Math.max(calculatedSize, 50), 500);
       setMaxFileSize(maxSize);
       
       console.log(`Device capabilities: ${memory}GB RAM, ${cores} cores`);
       console.log(`Calculated max file size: ${maxSize}MB`);
     } catch (error) {
       console.error('Error testing performance:', error);
-      setMaxFileSize(100); // Default to 100MB if testing fails
+      setMaxFileSize(100);
     }
   }, []);
 
@@ -131,8 +71,8 @@ export default function Home() {
   const handleVideoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      console.log('Selected file:', file);
       
-      // Check file size and show warning
       const fileSizeMB = file.size / (1024 * 1024);
       if (fileSizeMB > maxFileSize) {
         const shouldContinue = window.confirm(
@@ -141,33 +81,38 @@ export default function Home() {
         if (!shouldContinue) {
           return;
         }
-        // Add warning to logs
         setLogs([`${t.fileSizeWarning} (${Math.round(fileSizeMB)}MB > ${maxFileSize}MB)`]);
       } else {
         setLogs([]);
       }
 
-      setVideo(file);
+      // Get the file path using Electron's dialog
+      const filePath = (file as any).path;
+      if (!filePath) {
+        console.error('Could not get file path');
+        setLogs(prev => [...prev, 'Could not get file path']);
+        return;
+      }
+
+      console.log('File path:', filePath);
+      setVideo({ ...file, path: filePath });
       setSilentSegments([]);
       setProgress(0);
       setProcessingTimes({ detection: 0, trimming: 0 });
 
-      // Create preview URL
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
 
-      // Generate thumbnail
       const video = document.createElement('video');
       video.src = url;
       await new Promise((resolve) => {
         video.onloadedmetadata = () => {
           setVideoDuration(video.duration);
-          video.currentTime = 0; // Seek to first frame
+          video.currentTime = 0;
           resolve(null);
         };
       });
 
-      // Create thumbnail when first frame is loaded
       await new Promise((resolve) => {
         video.onseeked = () => {
           const canvas = document.createElement('canvas');
@@ -180,7 +125,6 @@ export default function Home() {
         };
       });
 
-      // Scroll to detect button
       setTimeout(() => {
         detectButtonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 100);
@@ -194,7 +138,7 @@ export default function Home() {
   };
 
   const detectSilence = async () => {
-    if (!video || !loaded || !ffmpegRef.current) return;
+    if (!video) return;
     
     scrollToProgress();
     const startTime = performance.now();
@@ -203,59 +147,88 @@ export default function Home() {
       setProcessing(true);
       setProgress(0);
       setLogs([t.detectingSilence]);
-      silenceLogsRef.current = [];
-      isDetectingRef.current = true;
       
-      const ffmpeg = ffmpegRef.current;
-      
-      await ffmpeg.writeFile('input.mp4', await fetchFile(video));
-      setLogs(prev => [...prev, t.videoLoaded]);
+      console.log('Starting silence detection for file:', video);
+      const filePath = (video as any).path;
+      if (!filePath) {
+        throw new Error('Could not get file path');
+      }
 
-      await ffmpeg.exec([
-        '-i', 'input.mp4',
-        '-af', `silencedetect=n=${threshold}dB:d=${minDuration}`,
-        '-f', 'null',
-        '-'
-      ]);
+      const segments = await window.electron.detectSilence({
+        filePath,
+        threshold,
+        minDuration
+      });
+      console.log('Detected segments:', segments);
 
-      // Parse silence detection from collected logs
-      const logStr = silenceLogsRef.current.join('\n');
-      console.log('Silence detection logs:', logStr);
-
-      const silenceStartRegex = /silence_start: ([\d.]+)/g;
-      const silenceEndRegex = /silence_end: ([\d.]+)/g;
-      
-      const starts = Array.from(logStr.matchAll(silenceStartRegex)).map(match => parseFloat(match[1]));
-      const ends = Array.from(logStr.matchAll(silenceEndRegex)).map(match => parseFloat(match[1]));
-
-      if (starts.length === 0 || ends.length === 0) {
+      if (segments.length === 0) {
         setLogs(prev => [...prev, t.noSilenceFound]);
         return;
       }
 
-      const segments = starts.map((start, i) => ({
-        start,
-        end: ends[i]
-      })).filter(segment => segment.end);
+      setLogs(prev => [...prev, `${segments.length}${t.silenceFound}`]);
+      setSilentSegments(segments);
 
-      if (segments.length > 0) {
-        setLogs(prev => [...prev, `${segments.length}${t.silenceFound}`]);
-        setSilentSegments(segments);
-      }
-
-      // Clean up
-      await ffmpeg.deleteFile('input.mp4');
     } catch (err) {
       const error = err as Error;
-      console.error('Sessiz kısım tespiti hatası:', error);
-      setLogs(prev => [...prev, `Hata: ${error.message}`]);
+      console.error('Silence detection error:', error);
+      setLogs(prev => [...prev, `${t.error}${error.message}`]);
     } finally {
-      const endTime = performance.now();
-      const detectionTime = (endTime - startTime) / 1000; // Convert to seconds
-      setProcessingTimes(prev => ({ ...prev, detection: detectionTime }));
-      isDetectingRef.current = false;
       setProcessing(false);
-      setProgress(100);
+      const endTime = performance.now();
+      setProcessingTimes(prev => ({
+        ...prev,
+        detection: (endTime - startTime) / 1000
+      }));
+    }
+  };
+
+  const trimSilence = async () => {
+    if (!video || silentSegments.length === 0) return;
+    
+    scrollToProgress();
+    const startTime = performance.now();
+    
+    try {
+      setProcessing(true);
+      setProgress(0);
+      setLogs([t.trimmingSilence]);
+
+      console.log('Starting silence trimming for file:', video);
+      const filePath = (video as any).path;
+      if (!filePath) {
+        throw new Error('Could not get file path');
+      }
+
+      // Setup progress listener
+      window.electron.onProgress((progress) => {
+        setProgress(progress);
+      });
+
+      const outputPath = await window.electron.trimSilence({
+        filePath,
+        segments: silentSegments,
+        padding
+      });
+      console.log('Output path:', outputPath);
+
+      setLogs(prev => [...prev, t.trimComplete]);
+      
+      // Open the file using Electron's shell
+      const cleanPath = outputPath.replace('file://', '');
+      await window.electron.openFile(cleanPath);
+
+    } catch (err) {
+      const error = err as Error;
+      console.error('Trimming error:', error);
+      setLogs(prev => [...prev, `${t.error}${error.message}`]);
+    } finally {
+      setProcessing(false);
+      const endTime = performance.now();
+      setProcessingTimes(prev => ({
+        ...prev,
+        trimming: (endTime - startTime) / 1000
+      }));
     }
   };
 
@@ -300,123 +273,6 @@ export default function Home() {
 
   // Add startTimeRef for time tracking
   const startTimeRef = useRef<number>(0);
-
-  const trimSilence = async () => {
-    if (!video || !loaded || !ffmpegRef.current || silentSegments.length === 0) return;
-    
-    scrollToProgress();
-    startTimeRef.current = performance.now();
-    const startTime = performance.now();
-    setProcessing(true);
-    const ffmpeg = ffmpegRef.current;
-    
-    // Store original file size
-    setSystemMetrics(prev => ({
-      ...prev,
-      originalSize: video.size
-    }));
-
-    try {
-      // Write the input video file
-      await ffmpeg.writeFile('input.mp4', await fetchFile(video));
-      setLogs(prev => [...prev, t.trimmingStarted]);
-
-      // Create filter complex command for trimming
-      const filterParts = [];
-      const totalParts = silentSegments.length + 1;
-
-      // First part (0 to first silence)
-      filterParts.push(`[0:v]trim=0:${silentSegments[0].start + padding},setpts=PTS-STARTPTS[v0];`);
-      filterParts.push(`[0:a]atrim=0:${silentSegments[0].start + padding},asetpts=PTS-STARTPTS[a0];`);
-
-      // Middle parts (between silences)
-      for (let i = 0; i < silentSegments.length - 1; i++) {
-        const start = silentSegments[i].end - padding;
-        const end = silentSegments[i + 1].start + padding;
-        filterParts.push(
-          `[0:v]trim=start=${start}:end=${end},setpts=PTS-STARTPTS[v${i + 1}];` +
-          `[0:a]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[a${i + 1}];`
-        );
-      }
-
-      // Last part (after last silence)
-      const lastIndex = silentSegments.length;
-      filterParts.push(
-        `[0:v]trim=start=${silentSegments[lastIndex - 1].end - padding},setpts=PTS-STARTPTS[v${lastIndex}];` +
-        `[0:a]atrim=start=${silentSegments[lastIndex - 1].end - padding},asetpts=PTS-STARTPTS[a${lastIndex}];`
-      );
-
-      // Concatenate all parts
-      const videoInputs = Array.from({ length: totalParts }, (_, i) => `[v${i}]`).join('');
-      const audioInputs = Array.from({ length: totalParts }, (_, i) => `[a${i}]`).join('');
-      
-      const filterComplex = filterParts.join('') +
-        `${videoInputs}concat=n=${totalParts}:v=1:a=0[vout];` +
-        `${audioInputs}concat=n=${totalParts}:v=0:a=1[aout]`;
-
-      setLogs(prev => [...prev, 'Kırpma işlemi başladı...']);
-
-      // Process the video with optimized settings
-      await ffmpeg.exec([
-        '-threads', '0',           // Use all available CPU threads
-        '-i', 'input.mp4',
-        '-filter_complex', filterComplex,
-        '-map', '[vout]',
-        '-map', '[aout]',
-        '-preset', 'ultrafast',    // Use fastest encoding preset
-        '-crf', '28',             // Lower quality for faster encoding
-        '-tune', 'fastdecode',    // Optimize for fast decoding
-        '-movflags', '+faststart', // Enable fast start for web playback
-        'output.mp4'
-      ]);
-
-      setLogs(prev => [...prev, t.processingVideo]);
-
-      // Read the output file
-      const data = await ffmpeg.readFile('output.mp4');
-      const blob = new Blob([data], { type: 'video/mp4' });
-      const url = URL.createObjectURL(blob);
-
-      // Create download link
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'processed_video.mp4';
-      a.click();
-
-      setLogs(prev => [...prev, t.completed]);
-
-      // Clean up
-      await ffmpeg.deleteFile('input.mp4');
-      await ffmpeg.deleteFile('output.mp4');
-
-      const endTime = performance.now();
-      const trimmingTime = (endTime - startTime) / 1000; // Convert to seconds
-      setProcessingTimes(prev => ({ ...prev, trimming: trimmingTime }));
-      
-      setLogs(prev => [...prev, `${t.completed} ${t.totalProcessingTime}: ${(processingTimes.detection + trimmingTime).toFixed(1)}s`]);
-
-      // Update progress tracking using the progress event
-      ffmpeg.on('progress', ({ progress }) => {
-        const currentProgress = progress * 100;
-        setProgress(currentProgress);
-        updateEstimatedTime(currentProgress);
-      });
-
-      // After processing, update processed size
-      setSystemMetrics(prev => ({
-        ...prev,
-        processedSize: blob.size
-      }));
-
-    } catch (err) {
-      const error = err as Error;
-      console.error('Error trimming silence:', error);
-      setLogs(prev => [...prev, `${t.error}${error.message}`]);
-    } finally {
-      setProcessing(false);
-      setProgress(0);
-    }
-  };
 
   // Add PerformanceMetrics component
   const PerformanceMetrics = () => (
@@ -537,16 +393,6 @@ export default function Home() {
               {t.title}
             </span>
           </h1>
-
-          {/* FFmpeg Loading State */}
-          {isFFmpegLoading && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-              <div className="bg-gray-800 p-6 rounded-xl shadow-xl flex flex-col items-center gap-4">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-300 border-t-blue-500"></div>
-                <p className="text-gray-300">{t.loadingFFmpeg}</p>
-              </div>
-            </div>
-          )}
 
           {/* Main Content */}
           <div className="space-y-4 sm:space-y-6">
@@ -673,7 +519,7 @@ export default function Home() {
                   <button
                     ref={detectButtonRef}
                     onClick={detectSilence}
-                    disabled={processing || !loaded}
+                    disabled={processing || !video}
                     className="flex items-center gap-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-6 sm:px-8 md:px-10 py-3 sm:py-4 md:py-5 rounded-lg transition-all shadow-lg hover:shadow-xl text-base sm:text-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
