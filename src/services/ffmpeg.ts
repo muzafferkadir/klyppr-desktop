@@ -4,13 +4,16 @@ export interface SilentSegment {
   end: number;
 }
 
+type Cleanup = () => void;
+
 declare global {
   interface Window {
     electron: {
       detectSilence: (args: { filePath: string; threshold: number; minDuration: number }) => Promise<SilentSegment[]>;
-      trimSilence: (args: { filePath: string; segments: SilentSegment[]; padding: number }) => Promise<string>;
+      trimSilence: (args: { filePath: string; segments: SilentSegment[]; padding: number; threadCount: number; outputPath: string }) => Promise<string>;
       openFile: (filePath: string) => Promise<boolean>;
-      onProgress: (callback: (progress: number) => void) => void;
+      onProgress: (callback: (progress: number) => void) => Cleanup;
+      getSaveFilePath: (filePath: string) => Promise<string | null>;
     };
   }
 }
@@ -46,13 +49,16 @@ export class FFmpegService {
 
   public async trimSilence(
     filePath: string,
-    segments: SilentSegment[]
+    segments: SilentSegment[],
+    options: { padding?: number; threadCount?: number; outputPath: string }
   ): Promise<string> {
     try {
       const result = await window.electron.trimSilence({
         filePath,
         segments,
-        padding: 0.05
+        padding: options.padding ?? 0.05,
+        threadCount: options.threadCount ?? 4,
+        outputPath: options.outputPath
       });
 
       return result;
@@ -62,7 +68,7 @@ export class FFmpegService {
     }
   }
 
-  public onProgress(callback: (progress: number) => void): void {
-    window.electron.onProgress(callback);
+  public onProgress(callback: (progress: number) => void): Cleanup {
+    return window.electron.onProgress(callback);
   }
 } 

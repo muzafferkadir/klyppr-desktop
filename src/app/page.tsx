@@ -16,6 +16,7 @@ export default function Home() {
   const [threshold, setThreshold] = useState(-45);
   const [minDuration, setMinDuration] = useState(0.6);
   const [padding, setPadding] = useState(0.05);
+  const [threadCount, setThreadCount] = useState(4);
   const [videoDuration, setVideoDuration] = useState(0);
   const [previewUrl, setPreviewUrl] = useState<string>('');
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -27,42 +28,25 @@ export default function Home() {
   const detectButtonRef = useRef<HTMLButtonElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const [maxFileSize, setMaxFileSize] = useState<number>(0);
-  const [processingTimes, setProcessingTimes] = useState<{
-    detection: number;
-    trimming: number;
-  }>({ detection: 0, trimming: 0 });
-  const [systemMetrics, setSystemMetrics] = useState<{
-    cpu: number;
-    memory: number;
-    estimatedTimeLeft: number;
-    originalSize: number;
-    processedSize: number;
-  }>({
-    cpu: 0,
-    memory: 0,
-    estimatedTimeLeft: 0,
-    originalSize: 0,
-    processedSize: 0
-  });
+  const [maxThreads, setMaxThreads] = useState(8);
+
+  useEffect(() => {
+    // Set max threads based on CPU cores
+    setMaxThreads(navigator.hardwareConcurrency || 8);
+  }, []);
 
   // Performance test function
   const testPerformance = useCallback(async () => {
     try {
       const memory = (navigator as any).deviceMemory || 4;
       const cores = navigator.hardwareConcurrency || 4;
-      
       const baseSize = 100;
       const memoryFactor = memory / 4;
       const coreFactor = cores / 4;
-      
       const calculatedSize = Math.floor(baseSize * Math.min(memoryFactor, coreFactor));
       const maxSize = Math.min(Math.max(calculatedSize, 50), 500);
       setMaxFileSize(maxSize);
-      
-      console.log(`Device capabilities: ${memory}GB RAM, ${cores} cores`);
-      console.log(`Calculated max file size: ${maxSize}MB`);
     } catch (error) {
-      console.error('Error testing performance:', error);
       setMaxFileSize(100);
     }
   }, []);
@@ -74,34 +58,27 @@ export default function Home() {
   const handleVideoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      console.log('Selected file:', file);
-      
       const fileSizeMB = file.size / (1024 * 1024);
+      
       if (fileSizeMB > maxFileSize) {
         const shouldContinue = window.confirm(
           `${t.fileSizeWarning} (${Math.round(fileSizeMB)}MB > ${maxFileSize}MB)\n\n${t.continueAnyway}`
         );
-        if (!shouldContinue) {
-          return;
-        }
+        if (!shouldContinue) return;
         setLogs([`${t.fileSizeWarning} (${Math.round(fileSizeMB)}MB > ${maxFileSize}MB)`]);
       } else {
         setLogs([]);
       }
 
-      // Get the file path using Electron's dialog
       const filePath = (file as any).path;
       if (!filePath) {
-        console.error('Could not get file path');
         setLogs(prev => [...prev, 'Could not get file path']);
         return;
       }
 
-      console.log('File path:', filePath);
       setVideo({ ...file, path: filePath });
       setSilentSegments([]);
       setProgress(0);
-      setProcessingTimes({ detection: 0, trimming: 0 });
 
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
@@ -144,25 +121,28 @@ export default function Home() {
     if (!video) return;
     
     scrollToProgress();
-    const startTime = performance.now();
     
     try {
       setProcessing(true);
       setProgress(0);
       setLogs([t.detectingSilence]);
       
-      console.log('Starting silence detection for file:', video);
       const filePath = (video as any).path;
       if (!filePath) {
         throw new Error('Could not get file path');
       }
+
+      const cleanup = ffmpegService.onProgress((progress: number) => {
+        setProgress(progress);
+      });
 
       const segments = await window.electron.detectSilence({
         filePath,
         threshold,
         minDuration
       });
-      console.log('Detected segments:', segments);
+
+      cleanup();
 
       if (segments.length === 0) {
         setLogs(prev => [...prev, t.noSilenceFound]);
@@ -174,32 +154,29 @@ export default function Home() {
 
     } catch (err) {
       const error = err as Error;
-      console.error('Silence detection error:', error);
       setLogs(prev => [...prev, `${t.error}${error.message}`]);
     } finally {
       setProcessing(false);
-      const endTime = performance.now();
-      setProcessingTimes(prev => ({
-        ...prev,
-        detection: (endTime - startTime) / 1000
-      }));
     }
   };
 
   const trimSilence = async () => {
     if (!video || silentSegments.length === 0) return;
     
-    scrollToProgress();
-    const startTime = performance.now();
-    
     try {
+      const outputPath = await window.electron.getSaveFilePath((video as any).path);
+      if (!outputPath) {
+        setLogs(prev => [...prev, t.operationCancelled]);
+        return;
+      }
+
+      scrollToProgress();
+      
       setProcessing(true);
       setProgress(0);
       setLogs([t.trimmingSilence]);
 
-      // Set up progress listener before starting the operation
-      window.electron.onProgress((progress: number) => {
-        console.log('Progress in UI:', progress);
+      const cleanup = ffmpegService.onProgress((progress: number) => {
         setProgress(progress);
       });
 
@@ -208,149 +185,23 @@ export default function Home() {
         throw new Error('Could not get file path');
       }
 
-      const outputPath = await ffmpegService.trimSilence(filePath, silentSegments);
-      console.log('Output path:', outputPath);
+      await ffmpegService.trimSilence(filePath, silentSegments, {
+        padding,
+        threadCount,
+        outputPath
+      });
       
-      // Open the file using Electron's shell
       await window.electron.openFile(outputPath);
       
       setLogs(prev => [...prev, t.trimComplete]);
+
+      cleanup();
     } catch (err) {
       const error = err as Error;
-      console.error('Trimming error:', error);
       setLogs(prev => [...prev, `${t.error}${error.message}`]);
     } finally {
       setProcessing(false);
-      const endTime = performance.now();
-      setProcessingTimes(prev => ({
-        ...prev,
-        trimming: (endTime - startTime) / 1000
-      }));
     }
-  };
-
-  // Monitor system performance
-  const updateSystemMetrics = useCallback(async () => {
-    try {
-      // Get memory usage
-      const memory = (performance as any).memory;
-      const usedMemory = memory ? (memory.usedJSHeapSize / memory.jsHeapSizeLimit) * 100 : 0;
-
-      // Estimate CPU usage based on processing time
-      const cpuUsage = processing ? Math.min((progress + 20), 100) : 0;
-
-      setSystemMetrics(prev => ({
-        ...prev,
-        cpu: Math.round(cpuUsage),
-        memory: Math.round(usedMemory)
-      }));
-    } catch (error) {
-      console.error('Error updating metrics:', error);
-    }
-  }, [progress, processing]);
-
-  useEffect(() => {
-    const interval = setInterval(updateSystemMetrics, 1000);
-    return () => clearInterval(interval);
-  }, [updateSystemMetrics]);
-
-  // Calculate estimated time left
-  const updateEstimatedTime = useCallback((currentProgress: number) => {
-    if (currentProgress > 0 && processing) {
-      const elapsedTime = (performance.now() - startTimeRef.current) / 1000;
-      const estimatedTotal = (elapsedTime * 100) / currentProgress;
-      const timeLeft = Math.max(0, estimatedTotal - elapsedTime);
-      
-      setSystemMetrics(prev => ({
-        ...prev,
-        estimatedTimeLeft: Math.round(timeLeft)
-      }));
-    }
-  }, [processing]);
-
-  // Add startTimeRef for time tracking
-  const startTimeRef = useRef<number>(0);
-
-  // Add PerformanceMetrics component
-  const PerformanceMetrics = () => (
-    <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-          </svg>
-          <span className="text-xs text-gray-300">{t.cpuUsage}</span>
-        </div>
-        <div className="w-24 bg-gray-700 rounded-full h-2">
-          <div
-            className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-            style={{ width: `${systemMetrics.cpu}%` }}
-          />
-        </div>
-        <span className="text-xs text-gray-400">{systemMetrics.cpu}%</span>
-      </div>
-
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <span className="text-xs text-gray-300">{t.memoryUsage}</span>
-        </div>
-        <div className="w-24 bg-gray-700 rounded-full h-2">
-          <div
-            className="bg-green-500 h-2 rounded-full transition-all duration-300"
-            style={{ width: `${systemMetrics.memory}%` }}
-          />
-        </div>
-        <span className="text-xs text-gray-400">{systemMetrics.memory}%</span>
-      </div>
-
-      {processing && systemMetrics.estimatedTimeLeft > 0 && (
-        <div className="flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span className="text-xs text-gray-300">
-            {t.estimatedTimeLeft}: {Math.round(systemMetrics.estimatedTimeLeft)}s
-          </span>
-        </div>
-      )}
-    </div>
-  );
-
-  // Add ProcessingSummary component
-  const ProcessingSummary = () => {
-    if (!systemMetrics.originalSize || !systemMetrics.processedSize) return null;
-
-    const originalMB = (systemMetrics.originalSize / (1024 * 1024)).toFixed(1);
-    const processedMB = (systemMetrics.processedSize / (1024 * 1024)).toFixed(1);
-    const reduction = Math.abs(((systemMetrics.originalSize - systemMetrics.processedSize) / systemMetrics.originalSize * 100)).toFixed(1);
-    const isReduced = systemMetrics.processedSize < systemMetrics.originalSize;
-
-    return (
-      <div className="bg-gray-800 rounded-xl p-4 space-y-3">
-        <h3 className="text-sm font-medium text-gray-200">{t.processingSummary}</h3>
-        <div className="grid grid-cols-2 gap-4 text-xs">
-          <div className="space-y-1">
-            <p className="text-gray-400">{t.originalSize}</p>
-            <p className="text-gray-200">{originalMB} MB</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-gray-400">{t.processedSize}</p>
-            <p className="text-gray-200">{processedMB} MB</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-gray-400">{t.sizeReduction}</p>
-            <p className={isReduced ? "text-green-400" : "text-red-400"}>{reduction}%</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-gray-400">{t.processingTime}</p>
-            <p className="text-gray-200">{processingTimes.detection + processingTimes.trimming}s</p>
-          </div>
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -509,6 +360,21 @@ export default function Home() {
                       <span>0s</span>
                       <span>0.5s</span>
                     </div>
+                  </div>
+
+                  {/* Add thread count control */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {t.threadCount}
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={maxThreads}
+                      value={threadCount}
+                      onChange={(e) => setThreadCount(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600"
+                    />
                   </div>
                 </div>
 
@@ -696,12 +562,6 @@ export default function Home() {
                 )}
               </div>
             )}
-
-            {/* Add PerformanceMetrics before Progress Bar */}
-            {processing && <PerformanceMetrics />}
-
-            {/* Add ProcessingSummary after Logs Section */}
-            {!processing && systemMetrics.processedSize > 0 && <ProcessingSummary />}
           </div>
         </div>
 

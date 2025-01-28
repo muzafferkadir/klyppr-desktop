@@ -1,32 +1,44 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { SilentSegment } from './ffmpeg';
+
+interface SilentSegment {
+  start: number;
+  end: number;
+}
+
+type Cleanup = () => void;
+
+// Define IPC channel types
+interface IpcChannels {
+  'progress': string;
+  'detect-silence': any;
+  'trim-silence': any;
+  'open-file': any;
+  'get-save-file-path': any;
+  'get-max-threads': string;
+}
 
 type ElectronAPI = {
-  detectSilence: (params: { filePath: string; threshold: number; minDuration: number }) => Promise<Array<{ start: number; end: number }>>;
-  trimSilence: (params: { filePath: string; segments: Array<{ start: number; end: number }>; padding: number }) => Promise<string>;
+  detectSilence: (args: { filePath: string; threshold: number; minDuration: number }) => Promise<SilentSegment[]>;
+  trimSilence: (args: { filePath: string; segments: SilentSegment[]; padding: number; threadCount: number; outputPath: string }) => Promise<string>;
   openFile: (filePath: string) => Promise<boolean>;
-  onProgress: (callback: (progress: number) => void) => void;
+  getSaveFilePath: (filePath: string) => Promise<string | null>;
+  getMaxThreads: () => Promise<number>;
+  onProgress: (callback: (progress: number) => void) => Cleanup;
 };
 
-// Expose protected methods that allow the renderer process to use
-// the ipcRenderer without exposing the entire object
-contextBridge.exposeInMainWorld('electron', {
-  detectSilence: (args: { filePath: string; threshold: number; minDuration: number }) => {
-    return ipcRenderer.invoke('detect-silence', args);
-  },
-  trimSilence: (args: { filePath: string; segments: Array<{ start: number; end: number }>; padding: number }) => {
-    return ipcRenderer.invoke('trim-silence', args);
-  },
-  openFile: (filePath: string) => {
-    return ipcRenderer.invoke('open-file', filePath);
-  },
-  onProgress: (callback: (progress: number) => void) => {
-    // Remove any existing listeners
-    ipcRenderer.removeAllListeners('progress');
-    // Add the new listener
-    ipcRenderer.on('progress', (_, progress) => {
-      console.log('Progress in preload:', progress);
-      callback(progress);
-    });
+// Type-safe IPC communication
+const api: ElectronAPI = {
+  detectSilence: (args) => ipcRenderer.invoke('detect-silence', args),
+  trimSilence: (args) => ipcRenderer.invoke('trim-silence', args),
+  openFile: (filePath) => ipcRenderer.invoke('open-file', filePath),
+  getSaveFilePath: (filePath) => ipcRenderer.invoke('get-save-file-path', filePath),
+  getMaxThreads: () => ipcRenderer.invoke('get-max-threads'),
+  onProgress: (callback) => {
+    const listener = (_: any, value: number) => callback(value);
+    ipcRenderer.on('progress', listener);
+    return () => ipcRenderer.removeListener('progress', listener);
   }
-}); 
+};
+
+// Expose the API to the renderer process
+contextBridge.exposeInMainWorld('electron', api); 

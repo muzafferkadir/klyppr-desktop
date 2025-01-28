@@ -36,7 +36,9 @@ export const translations = {
     sizeReduction: 'Boyut Azaltma',
     processingTime: 'İşlem Süresi',
     totalDetectionTime: 'Toplam Algılama Süresi',
-    totalTrimmingTime: 'Toplam Kırpma Süresi'
+    totalTrimmingTime: 'Toplam Kırpma Süresi',
+    threadCount: 'İş Parçacığı Sayısı',
+    operationCancelled: 'İşlem kullanıcı tarafından iptal edildi'
   },
   en: {
     title: 'Klyppr',
@@ -75,6 +77,8 @@ export const translations = {
     sizeReduction: 'Size Reduction',
     processingTime: 'Processing Time',
     totalDetectionTime: 'Total Detection Time',
-    totalTrimmingTime: 'Total Trimming Time'
+    totalTrimmingTime: 'Total Trimming Time',
+    threadCount: 'Thread Count',
+    operationCancelled: 'Operation cancelled by user'
   }
 } as const; 

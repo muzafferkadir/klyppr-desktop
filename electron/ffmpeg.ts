@@ -1,10 +1,33 @@
 import ffmpeg from 'fluent-ffmpeg';
 import { ipcMain, app, BrowserWindow, dialog } from 'electron';
 import { join, dirname, parse } from 'path';
-import { tmpdir } from 'os';
 import { mkdirSync, existsSync } from 'fs';
 import { EventEmitter } from 'events';
 import isDev from 'electron-is-dev';
+
+// FFmpeg types
+interface FFmpegProgress {
+  frames: number;
+  currentFps?: number;
+  currentKbps?: number;
+  targetSize?: number;
+  timemark?: string;
+  percent?: number;
+}
+
+interface FFmpegCodecData {
+  format: {
+    duration?: number;
+    size?: string;
+    bit_rate?: string;
+  };
+  frames?: string;
+}
+
+export interface SilentSegment {
+  start: number;
+  end: number;
+}
 
 // Add type declarations for fluent-ffmpeg
 declare module 'fluent-ffmpeg' {
@@ -16,45 +39,6 @@ declare module 'fluent-ffmpeg' {
     on(event: 'error', callback: (err: Error) => void): FfmpegCommand;
     on(event: 'stderr', callback: (stderrLine: string) => void): FfmpegCommand;
   }
-}
-
-export interface SilentSegment {
-  start: number;
-  end: number;
-}
-
-// Add type definition for FFmpeg progress data
-interface FFmpegProgress {
-  frames?: number;
-  currentFps?: number;
-  currentKbps?: number;
-  targetSize?: number;
-  timemark?: string;
-  percent?: number;
-}
-
-// Add type definition for FFmpeg codec data
-interface FFmpegCodecData {
-  format: {
-    duration?: number;
-    size?: string;
-    bit_rate?: string;
-    filename?: string;
-  };
-  streams?: Array<{
-    codec_type?: string;
-    codec_name?: string;
-    width?: number;
-    height?: number;
-    duration?: string;
-    nb_frames?: string;
-  }>;
-  frames?: string;
-  audio?: string;
-  audio_details?: string[];
-  video?: string;
-  video_details?: string[];
-  duration?: string;
 }
 
 export class FFmpegService extends EventEmitter {
@@ -77,50 +61,47 @@ export class FFmpegService extends EventEmitter {
 
   private setupIpcHandlers() {
     ipcMain.handle('detect-silence', async (_, { filePath, threshold, minDuration }) => {
-      try {
-        return await this.detectSilence(filePath, threshold, minDuration);
-      } catch (error) {
-        console.error('Error detecting silence:', error);
-        throw error;
-      }
+      return await this.detectSilence(filePath, threshold, minDuration);
     });
 
-    ipcMain.handle('trim-silence', async (_, { filePath, segments, padding }) => {
-      try {
-        return await this.trimSilence(filePath, segments, padding);
-      } catch (error) {
-        console.error('Error trimming silence:', error);
-        throw error;
-      }
+    ipcMain.handle('get-save-file-path', async (_, filePath) => {
+      return await this.getSaveFilePath(filePath);
+    });
+
+    ipcMain.handle('trim-silence', async (_, { filePath, segments, padding, threadCount, outputPath }) => {
+      return await this.trimSilence(filePath, segments, padding, threadCount, outputPath);
     });
   }
 
   private setupFFmpegPath() {
-    const platform = process.platform;
-    let ffmpegPath: string;
-    let ffprobePath: string;
+    const ffmpegPath = isDev
+      ? join(process.cwd(), 'public', 'ffmpeg')
+      : join(process.resourcesPath, 'ffmpeg');
+    
+    const ffprobePath = isDev
+      ? join(process.cwd(), 'public', 'ffprobe')
+      : join(process.resourcesPath, 'ffprobe');
 
-    if (isDev) {
-      // In development, use the binaries from public folder
-      ffmpegPath = join(process.cwd(), 'public', 'ffmpeg');
-      ffprobePath = join(process.cwd(), 'public', 'ffprobe');
-    } else {
-      // In production, use the bundled binaries from resources
-      ffmpegPath = join(process.resourcesPath, 'ffmpeg');
-      ffprobePath = join(process.resourcesPath, 'ffprobe');
-    }
-
-    // Add executable permission in production
-    if (!isDev && platform !== 'win32') {
+    if (!isDev && process.platform !== 'win32') {
       require('child_process').execSync(`chmod +x "${ffmpegPath}"`);
       require('child_process').execSync(`chmod +x "${ffprobePath}"`);
     }
 
-    console.log('Setting FFmpeg path:', ffmpegPath);
-    console.log('Setting FFprobe path:', ffprobePath);
-
     ffmpeg.setFfmpegPath(ffmpegPath);
     ffmpeg.setFfprobePath(ffprobePath);
+  }
+
+  private sendProgress(value: number) {
+    if (this.mainWindow?.webContents) {
+      const clampedValue = Math.min(100, Math.max(0, value));
+      const progress = clampedValue.toFixed(2);
+      try {
+        // Cast to any to bypass TypeScript type checking
+        (this.mainWindow.webContents as any).send('progress', progress);
+      } catch (error) {
+        console.error('[FFmpeg] Error sending progress:', error);
+      }
+    }
   }
 
   private async getSaveFilePath(originalPath: string): Promise<string | null> {
@@ -129,7 +110,7 @@ export class FFmpegService extends EventEmitter {
     
     const result = await dialog.showSaveDialog(this.mainWindow, {
       title: 'Save Trimmed Video',
-      defaultPath: defaultPath,
+      defaultPath,
       filters: [
         { name: 'MP4 Video', extensions: ['mp4'] },
         { name: 'All Files', extensions: ['*'] }
@@ -144,32 +125,72 @@ export class FFmpegService extends EventEmitter {
     threshold: number = -45,
     minDuration: number = 0.6
   ): Promise<SilentSegment[]> {
+    console.log(`[FFmpeg] Starting silence detection for: ${inputPath}`);
+    console.log(`[FFmpeg] Parameters - threshold: ${threshold}dB, minDuration: ${minDuration}s`);
+
     return new Promise((resolve, reject) => {
-      const silenceStartRegex = /silence_start: ([\d.]+)/;
-      const silenceEndRegex = /silence_end: ([\d.]+)/;
       const silentSegments: SilentSegment[] = [];
       let currentSegment: Partial<SilentSegment> = {};
+      let totalDuration = 0;
+      let currentTime = 0;
+      let lastProgressTime = Date.now();
 
       ffmpeg(inputPath)
         .audioFilters(`silencedetect=n=${threshold}dB:d=${minDuration}`)
         .format('null')
-        .on('error', (err: Error) => reject(err))
+        .on('start', (command) => {
+          console.log(`[FFmpeg] Executing command: ${command}`);
+          this.sendProgress(0);
+        })
+        .on('codecData', (data: FFmpegCodecData) => {
+          console.log(`[FFmpeg] Codec data received:`, data);
+          if (data.format?.duration) {
+            totalDuration = parseFloat(data.format.duration.toString());
+            console.log(`[FFmpeg] Total duration: ${totalDuration}s`);
+          }
+        })
         .on('stderr', (stderrLine: string) => {
-          const startMatch = stderrLine.match(silenceStartRegex);
-          const endMatch = stderrLine.match(silenceEndRegex);
+          const startMatch = stderrLine.match(/silence_start: ([\d.]+)/);
+          const endMatch = stderrLine.match(/silence_end: ([\d.]+)/);
+          const timeMatch = stderrLine.match(/time=(\d+:\d+:\d+.\d+)/);
 
           if (startMatch) {
             currentSegment.start = parseFloat(startMatch[1]);
+            console.log(`[FFmpeg] Silence detected at: ${currentSegment.start}s`);
           }
           if (endMatch) {
             currentSegment.end = parseFloat(endMatch[1]);
+            console.log(`[FFmpeg] Silence ended at: ${currentSegment.end}s`);
             if (currentSegment.start !== undefined && currentSegment.end !== undefined) {
               silentSegments.push(currentSegment as SilentSegment);
+              console.log(`[FFmpeg] Added silent segment: ${currentSegment.start}s - ${currentSegment.end}s`);
               currentSegment = {};
             }
           }
+
+          if (timeMatch) {
+            const [hours, minutes, seconds] = timeMatch[1].split(':').map(parseFloat);
+            currentTime = hours * 3600 + minutes * 60 + seconds;
+            
+            // Only update progress every 100ms to avoid flooding
+            const now = Date.now();
+            if (now - lastProgressTime >= 100) {
+              const progress = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
+              this.sendProgress(Math.min(progress, 99)); // Never send 100% until actually complete
+              lastProgressTime = now;
+              console.log(`[FFmpeg] Progress: ${progress.toFixed(2)}% (${currentTime.toFixed(2)}s / ${totalDuration.toFixed(2)}s)`);
+            }
+          }
         })
-        .on('end', () => resolve(silentSegments))
+        .on('end', () => {
+          console.log(`[FFmpeg] Silence detection completed. Found ${silentSegments.length} silent segments.`);
+          this.sendProgress(100);
+          resolve(silentSegments);
+        })
+        .on('error', (err) => {
+          console.error(`[FFmpeg] Error during silence detection:`, err);
+          reject(err);
+        })
         .output('/dev/null')
         .run();
     });
@@ -178,19 +199,20 @@ export class FFmpegService extends EventEmitter {
   private async getVideoDuration(filePath: string): Promise<number> {
     return new Promise((resolve, reject) => {
       ffmpeg.ffprobe(filePath, (err, metadata) => {
-        if (err) {
-          console.error('Error getting duration:', err);
-          reject(err);
-          return;
-        }
-        resolve(metadata.format.duration || 999999);
+        if (err) reject(err);
+        else resolve(metadata.format.duration || 0);
       });
     });
   }
 
-  private async getNonSilentSegments(silentSegments: SilentSegment[], filePath: string, padding: number = 0.05): Promise<SilentSegment[]> {
+  private async getNonSilentSegments(
+    silentSegments: SilentSegment[],
+    filePath: string,
+    padding: number = 0.05
+  ): Promise<SilentSegment[]> {
     const nonSilentSegments: SilentSegment[] = [];
     let currentTime = 0;
+    const duration = await this.getVideoDuration(filePath);
 
     for (const segment of silentSegments) {
       if (segment.start > currentTime) {
@@ -202,8 +224,6 @@ export class FFmpegService extends EventEmitter {
       currentTime = segment.end;
     }
 
-    // Add final non-silent segment if needed
-    const duration = await this.getVideoDuration(filePath);
     if (currentTime < duration) {
       nonSilentSegments.push({
         start: Math.max(0, currentTime - padding),
@@ -217,79 +237,88 @@ export class FFmpegService extends EventEmitter {
   public async trimSilence(
     filePath: string,
     silentSegments: SilentSegment[],
-    padding: number = 0.05
+    padding: number = 0.05,
+    threadCount: number = 4,
+    outputPath: string
   ): Promise<string> {
-    if (!silentSegments || silentSegments.length === 0) {
+    console.log(`[FFmpeg] Starting silence trimming for: ${filePath}`);
+    console.log(`[FFmpeg] Parameters - padding: ${padding}s, threadCount: ${threadCount}`);
+    console.log(`[FFmpeg] Output path: ${outputPath}`);
+
+    if (!silentSegments?.length) {
+      console.log(`[FFmpeg] No silent segments found, skipping trim`);
       throw new Error('No segments provided');
     }
 
-    // Get non-silent segments
     const nonSilentSegments = await this.getNonSilentSegments(silentSegments, filePath, padding);
-    if (nonSilentSegments.length === 0) {
+    console.log(`[FFmpeg] Non-silent segments:`, nonSilentSegments);
+
+    if (!nonSilentSegments.length) {
+      console.log(`[FFmpeg] No non-silent segments found`);
       throw new Error('No non-silent segments found');
     }
 
-    // Get save path from user
-    const outputPath = await this.getSaveFilePath(filePath);
-    if (!outputPath) {
-      throw new Error('Operation cancelled by user');
-    }
-
-    // Ensure output directory exists
     const dir = dirname(outputPath);
     if (!existsSync(dir)) {
+      console.log(`[FFmpeg] Creating output directory: ${dir}`);
       mkdirSync(dir, { recursive: true });
     }
 
     return new Promise((resolve, reject) => {
-      let totalFrames = 1000; // Default value
+      let totalFrames = 1000;
       let processedFrames = 0;
+      let lastProgress = 0;
+      let lastProgressTime = Date.now();
 
-      // Create filter complex command
-      const filters: string[] = [];
-      
-      // Add segment filters for non-silent parts
-      nonSilentSegments.forEach((segment, i) => {
-        filters.push(
-          `[0:v]trim=start=${segment.start}:end=${segment.end},setpts=PTS-STARTPTS[v${i}]`,
-          `[0:a]atrim=start=${segment.start}:end=${segment.end},asetpts=PTS-STARTPTS[a${i}]`
-        );
-      });
+      const filters = nonSilentSegments.map((segment, i) => [
+        `[0:v]trim=start=${segment.start}:end=${segment.end},setpts=PTS-STARTPTS[v${i}]`,
+        `[0:a]atrim=start=${segment.start}:end=${segment.end},asetpts=PTS-STARTPTS[a${i}]`
+      ]).flat();
 
-      // Add concat filters
-      const videoInputs = nonSilentSegments.map((_, i) => `[v${i}]`).join('');
-      const audioInputs = nonSilentSegments.map((_, i) => `[a${i}]`).join('');
-      
-      filters.push(
-        `${videoInputs}concat=n=${nonSilentSegments.length}:v=1:a=0[vout]`,
-        `${audioInputs}concat=n=${nonSilentSegments.length}:v=0:a=1[aout]`
-      );
+      const segments = nonSilentSegments.map((_, i) => `[v${i}][a${i}]`).join('');
+      filters.push(`${segments}concat=n=${nonSilentSegments.length}:v=1:a=1[outv][outa]`);
+
+      console.log(`[FFmpeg] Complex filter:`, filters);
 
       ffmpeg(filePath)
+        .outputOptions(['-threads', threadCount.toString()])
+        .complexFilter(filters, ['outv', 'outa'])
         .on('start', (command) => {
-          console.log('FFmpeg command:', command);
+          console.log(`[FFmpeg] Executing trim command: ${command}`);
+          this.sendProgress(0);
         })
         .on('codecData', (data: FFmpegCodecData) => {
-          // Try to get frames from different possible locations
-          const frames = data.frames || 
-                        data.streams?.[0]?.nb_frames || 
-                        '1000';
-          totalFrames = parseInt(frames, 10);
+          console.log(`[FFmpeg] Codec data received:`, data);
+          if (data.frames) {
+            totalFrames = parseInt(data.frames, 10);
+            console.log(`[FFmpeg] Total frames: ${totalFrames}`);
+          }
         })
         .on('progress', (progress: FFmpegProgress) => {
-          processedFrames = progress.frames || 0;
-          const percent = Math.min(Math.round((processedFrames / totalFrames) * 100), 100);
-          this.emit('progress', percent);
-        })
-        .on('error', (err) => {
-          console.error('Error during processing:', err);
-          reject(err);
+          if (progress.frames) {
+            processedFrames = progress.frames;
+            const percent = Math.min((processedFrames / totalFrames) * 100, 99); // Never send 100% until actually complete
+
+            // Only update progress every 100ms to avoid flooding
+            const now = Date.now();
+            if (Math.abs(percent - lastProgress) >= 1 && now - lastProgressTime >= 100) {
+              lastProgress = percent;
+              lastProgressTime = now;
+              this.sendProgress(percent);
+              console.log(`[FFmpeg] Trim progress: ${percent.toFixed(2)}% (${processedFrames}/${totalFrames} frames)`);
+            }
+          }
         })
         .on('end', () => {
+          console.log(`[FFmpeg] Trim completed successfully`);
+          this.sendProgress(100);
           resolve(outputPath);
         })
-        .complexFilter(filters, ['vout', 'aout'])
+        .on('error', (err) => {
+          console.error(`[FFmpeg] Error during trim:`, err);
+          reject(err);
+        })
         .save(outputPath);
     });
   }
-} 
+}
