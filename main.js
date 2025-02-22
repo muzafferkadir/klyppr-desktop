@@ -15,17 +15,42 @@ const ffprobePath = isDev
 console.log('FFmpeg Path:', ffmpegPath);
 console.log('FFprobe Path:', ffprobePath);
 
-// FFmpeg yollarını ayarla ve izinleri kontrol et
-try {
-    fs.chmodSync(ffmpegPath, '755');
-    fs.chmodSync(ffprobePath, '755');
-    console.log('FFmpeg binary izinleri ayarlandı');
-} catch (error) {
-    console.error('FFmpeg binary izinleri ayarlanamadı:', error);
-}
+// FFmpeg binary'lerinin varlığını kontrol et ve izinleri ayarla
+async function setupFFmpegBinaries() {
+    try {
+        // Dizinlerin varlığını kontrol et ve oluştur
+        const binDir = isDev ? path.join(__dirname, 'bin') : path.join(process.resourcesPath, 'bin');
+        await fs.ensureDir(binDir);
 
-ffmpeg.setFfmpegPath(ffmpegPath);
-ffmpeg.setFfprobePath(ffprobePath);
+        // FFmpeg binary'lerinin varlığını kontrol et
+        const [ffmpegExists, ffprobeExists] = await Promise.all([
+            fs.pathExists(ffmpegPath),
+            fs.pathExists(ffprobePath)
+        ]);
+
+        if (!ffmpegExists || !ffprobeExists) {
+            throw new Error('FFmpeg veya FFprobe binary\'leri bulunamadı. Lütfen binary\'leri bin klasörüne kopyalayın.');
+        }
+
+        // İzinleri ayarla (sadece macOS ve Linux için)
+        if (process.platform !== 'win32') {
+            await Promise.all([
+                fs.chmod(ffmpegPath, '755'),
+                fs.chmod(ffprobePath, '755')
+            ]);
+            console.log('FFmpeg binary izinleri ayarlandı');
+        }
+
+        // FFmpeg yollarını ayarla
+        ffmpeg.setFfmpegPath(ffmpegPath);
+        ffmpeg.setFfprobePath(ffprobePath);
+        
+        console.log('FFmpeg kurulumu başarıyla tamamlandı');
+    } catch (error) {
+        console.error('FFmpeg kurulum hatası:', error);
+        throw error;
+    }
+}
 
 let mainWindow;
 
@@ -42,7 +67,16 @@ function createWindow() {
     mainWindow.loadFile('index.html');
 }
 
-app.whenReady().then(createWindow);
+// Uygulama başlatıldığında
+app.whenReady().then(async () => {
+    try {
+        await setupFFmpegBinaries();
+        createWindow();
+    } catch (error) {
+        console.error('Uygulama başlatma hatası:', error);
+        app.quit();
+    }
+});
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
