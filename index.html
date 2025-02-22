@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Klyppr - Video Sessizlik Düzenleyici</title>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #2196F3;
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="text"], input[type="number"] {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        input[type="number"] {
+            width: 100px;
+        }
+
+        button {
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #1976D2;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .browse-btn {
+            white-space: nowrap;
+        }
+
+        #progress {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .progress-bar {
+            height: 10px;
+            background: #e9ecef;
+            border-radius: 5px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: #2196F3;
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        #log {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Klyppr - Video Sessizlik Düzenleyici</h1>
+        
+        <div class="form-group">
+            <label>Giriş Videosu:</label>
+            <div class="input-group">
+                <input type="text" id="inputPath" readonly placeholder="Video dosyası seçin...">
+                <button class="browse-btn" onclick="selectInput()">Gözat</button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Çıkış Klasörü:</label>
+            <div class="input-group">
+                <input type="text" id="outputPath" readonly placeholder="Çıkış klasörü seçin...">
+                <button class="browse-btn" onclick="selectOutput()">Gözat</button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Sessizlik Eşiği (dB):</label>
+            <input type="number" id="silenceDb" value="-45" step="1">
+        </div>
+
+        <div class="form-group">
+            <label>Minimum Sessizlik Süresi (saniye):</label>
+            <input type="number" id="minSilenceDuration" value="0.6" step="0.1" min="0">
+        </div>
+
+        <div class="form-group">
+            <label>Padding Süresi (saniye):</label>
+            <input type="number" id="paddingDuration" value="0.05" step="0.01" min="0">
+        </div>
+
+        <button id="startBtn" onclick="startProcessing()" disabled>İşlemi Başlat</button>
+
+        <div id="progress">
+            <div>İşlem durumu: <span id="status">Hazırlanıyor...</span></div>
+            <div class="progress-bar">
+                <div class="progress-bar-fill" id="progressBar"></div>
+            </div>
+        </div>
+
+        <div id="log"></div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+        
+        function selectInput() {
+            ipcRenderer.send('select-input');
+        }
+
+        function selectOutput() {
+            ipcRenderer.send('select-output');
+        }
+
+        function startProcessing() {
+            const params = {
+                inputPath: document.getElementById('inputPath').value,
+                outputPath: document.getElementById('outputPath').value,
+                silenceDb: document.getElementById('silenceDb').value,
+                minSilenceDuration: document.getElementById('minSilenceDuration').value,
+                paddingDuration: document.getElementById('paddingDuration').value
+            };
+
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('progress').style.display = 'block';
+            document.getElementById('log').style.display = 'block';
+            document.getElementById('status').textContent = 'İşlem başlatılıyor...';
+
+            ipcRenderer.send('start-processing', params);
+        }
+
+        // Input path seçildiğinde
+        ipcRenderer.on('input-selected', (event, path) => {
+            document.getElementById('inputPath').value = path;
+            updateStartButton();
+        });
+
+        // Output path seçildiğinde
+        ipcRenderer.on('output-selected', (event, path) => {
+            document.getElementById('outputPath').value = path;
+            updateStartButton();
+        });
+
+        // İlerleme durumu güncellendiğinde
+        ipcRenderer.on('progress', (event, data) => {
+            document.getElementById('status').textContent = data.status;
+            document.getElementById('progressBar').style.width = `${data.percent}%`;
+        });
+
+        // Log mesajı geldiğinde
+        ipcRenderer.on('log', (event, message) => {
+            const log = document.getElementById('log');
+            log.innerHTML += message + '<br>';
+            log.scrollTop = log.scrollHeight;
+        });
+
+        // İşlem tamamlandığında
+        ipcRenderer.on('completed', (event, success) => {
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('status').textContent = success ? 'İşlem tamamlandı!' : 'Hata oluştu!';
+        });
+
+        // Başlat butonunun durumunu güncelle
+        function updateStartButton() {
+            const inputPath = document.getElementById('inputPath').value;
+            const outputPath = document.getElementById('outputPath').value;
+            document.getElementById('startBtn').disabled = !(inputPath && outputPath);
+        }
+    </script>
+</body>
+</html> 
