@@ -6,48 +6,41 @@ const fs = require('fs-extra');
 // Use FFmpeg from node_modules in development mode
 const isDev = process.env.NODE_ENV === 'development';
 
-// Set FFmpeg binary paths
-const ffmpegPath = isDev 
-    ? path.join(__dirname, 'bin', 'mac', 'ffmpeg')
-    : path.join(process.resourcesPath, 'bin', 'ffmpeg');
-const ffprobePath = isDev
-    ? path.join(__dirname, 'bin', 'mac', 'ffprobe')
-    : path.join(process.resourcesPath, 'bin', 'ffprobe');
-
-console.log('FFmpeg Path:', ffmpegPath);
-console.log('FFprobe Path:', ffprobePath);
-
 // Check FFmpeg binaries and set permissions
 async function setupFFmpegBinaries() {
-    try {
-        // Check binaries
-        const [ffmpegExists, ffprobeExists] = await Promise.all([
-            fs.pathExists(ffmpegPath),
-            fs.pathExists(ffprobePath)
-        ]);
-
-        if (!ffmpegExists || !ffprobeExists) {
-            throw new Error('FFmpeg or FFprobe binaries not found.');
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    const isWindows = process.platform === 'win32';
+    
+    let ffmpegPath, ffprobePath;
+    
+    if (isDevelopment) {
+        // Development ortamında
+        if (isWindows) {
+            ffmpegPath = path.join(__dirname, 'bin', 'win', 'ffmpeg.exe');
+            ffprobePath = path.join(__dirname, 'bin', 'win', 'ffprobe.exe');
+        } else {
+            ffmpegPath = path.join(__dirname, 'bin', 'mac', 'ffmpeg');
+            ffprobePath = path.join(__dirname, 'bin', 'mac', 'ffprobe');
         }
-
-        // Set permissions (only for macOS and Linux)
-        if (process.platform !== 'win32') {
-            await Promise.all([
-                fs.chmod(ffmpegPath, '755'),
-                fs.chmod(ffprobePath, '755')
-            ]);
-            console.log('FFmpeg binary permissions set');
+    } else {
+        // Production ortamında
+        if (isWindows) {
+            ffmpegPath = path.join(process.resourcesPath, 'bin', 'ffmpeg.exe');
+            ffprobePath = path.join(process.resourcesPath, 'bin', 'ffprobe.exe');
+        } else {
+            ffmpegPath = path.join(process.resourcesPath, 'bin', 'ffmpeg');
+            ffprobePath = path.join(process.resourcesPath, 'bin', 'ffprobe');
         }
-
-        // Set FFmpeg paths
-        ffmpeg.setFfmpegPath(ffmpegPath);
-        ffmpeg.setFfprobePath(ffprobePath);
-        
-        console.log('FFmpeg setup completed successfully');
-    } catch (error) {
-        console.error('FFmpeg setup error:', error);
-        throw error;
     }
+
+    console.log('FFmpeg Path:', ffmpegPath);
+    console.log('FFprobe Path:', ffprobePath);
+
+    if (!fs.existsSync(ffmpegPath) || !fs.existsSync(ffprobePath)) {
+        throw new Error('FFmpeg or FFprobe binaries not found.');
+    }
+
+    return { ffmpegPath, ffprobePath };
 }
 
 let mainWindow;
@@ -206,7 +199,9 @@ async function processVideo(inputFile, outputFile, silenceRanges, event) {
         const selectFilter = selectParts.join('+');
         event.reply('log', 'Starting video processing...');
 
-        ffmpeg(inputFile)
+        const isWindows = process.platform === 'win32';
+        
+        const ffmpegCommand = ffmpeg(inputFile)
             .videoFilters([
                 `select='${selectFilter}'`,
                 'setpts=N/FRAME_RATE/TB'
@@ -214,15 +209,28 @@ async function processVideo(inputFile, outputFile, silenceRanges, event) {
             .audioFilters([
                 `aselect='${selectFilter}'`,
                 'asetpts=N/SR/TB'
-            ])
-            .outputOptions([
+            ]);
+
+        // Platform specific encoding settings
+        if (isWindows) {
+            ffmpegCommand.outputOptions([
+                '-c:v', 'mpeg4',
+                '-q:v', '5',
+                '-c:a', 'mp3',
+                '-b:a', '128k'
+            ]);
+        } else {
+            ffmpegCommand.outputOptions([
                 '-c:v', 'libx264',
                 '-preset', 'veryfast',
                 '-crf', '23',
                 '-c:a', 'aac',
                 '-b:a', '128k',
                 '-movflags', '+faststart'
-            ])
+            ]);
+        }
+
+        ffmpegCommand
             .on('start', command => {
                 event.reply('log', `Running FFmpeg command: ${command}`);
             })

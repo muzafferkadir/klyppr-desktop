@@ -4,7 +4,7 @@
   "description": "Desktop version of Klyppr video editor",
   "main": "main.js",
   "scripts": {
-    "start": "NODE_ENV=development electron .",
+    "start": "cross-env NODE_ENV=development electron .",
     "build": "electron-builder",
     "build:mac": "electron-builder --mac",
     "build:win32": "electron-builder --win --ia32",
@@ -42,18 +42,27 @@
     ],
     "mac": {
       "category": "public.app-category.video",
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "icon": "public/logo.png"
     },
     "win": {
-      "target": ["portable"],
+      "target": [
+        "portable"
+      ],
       "icon": "public/logo.png"
     },
     "portable": {
       "artifactName": "Klyppr-Portable-${arch}.exe"
     }
   },
-  "keywords": ["video", "editor", "silence", "ffmpeg"],
+  "keywords": [
+    "video",
+    "editor",
+    "silence",
+    "ffmpeg"
+  ],
   "author": "Muzaffer Kadir YILMAZ",
   "license": "ISC",
   "dependencies": {
@@ -61,8 +70,9 @@
     "fs-extra": "^11.3.0"
   },
   "devDependencies": {
+    "@electron/remote": "^2.1.2",
+    "cross-env": "^7.0.3",
     "electron": "^29.1.4",
-    "electron-builder": "^24.13.3",
-    "@electron/remote": "^2.1.2"
+    "electron-builder": "^24.13.3"
   }
 }
