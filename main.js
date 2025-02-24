@@ -3,14 +3,16 @@ const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
 const fs = require('fs-extra');
 
-// FFmpeg binary yollarını ayarla
+// Development modunda node_modules'tan FFmpeg kullan
 const isDev = process.env.NODE_ENV === 'development';
+
+// FFmpeg binary yollarını ayarla
 const ffmpegPath = isDev 
-    ? path.join(__dirname, 'bin', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg')
-    : path.join(process.resourcesPath, 'bin', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+    ? path.join(__dirname, 'bin', 'mac', 'ffmpeg')
+    : path.join(process.resourcesPath, 'bin', 'ffmpeg');
 const ffprobePath = isDev
-    ? path.join(__dirname, 'bin', process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe')
-    : path.join(process.resourcesPath, 'bin', process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe');
+    ? path.join(__dirname, 'bin', 'mac', 'ffprobe')
+    : path.join(process.resourcesPath, 'bin', 'ffprobe');
 
 console.log('FFmpeg Path:', ffmpegPath);
 console.log('FFprobe Path:', ffprobePath);
@@ -18,18 +20,14 @@ console.log('FFprobe Path:', ffprobePath);
 // FFmpeg binary'lerinin varlığını kontrol et ve izinleri ayarla
 async function setupFFmpegBinaries() {
     try {
-        // Dizinlerin varlığını kontrol et ve oluştur
-        const binDir = isDev ? path.join(__dirname, 'bin') : path.join(process.resourcesPath, 'bin');
-        await fs.ensureDir(binDir);
-
-        // FFmpeg binary'lerinin varlığını kontrol et
+        // Binary'leri kontrol et
         const [ffmpegExists, ffprobeExists] = await Promise.all([
             fs.pathExists(ffmpegPath),
             fs.pathExists(ffprobePath)
         ]);
 
         if (!ffmpegExists || !ffprobeExists) {
-            throw new Error('FFmpeg veya FFprobe binary\'leri bulunamadı. Lütfen binary\'leri bin klasörüne kopyalayın.');
+            throw new Error('FFmpeg veya FFprobe binary\'leri bulunamadı.');
         }
 
         // İzinleri ayarla (sadece macOS ve Linux için)

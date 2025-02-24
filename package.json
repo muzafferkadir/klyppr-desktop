@@ -7,7 +7,8 @@
     "start": "NODE_ENV=development electron .",
     "build": "electron-builder",
     "build:mac": "electron-builder --mac",
-    "build:win": "electron-builder --win"
+    "build:win32": "electron-builder --win --x64",
+    "build:win64": "electron-builder --win --arm64"
   },
   "build": {
     "appId": "com.klyppr.app",
@@ -23,25 +24,37 @@
     ],
     "extraResources": [
       {
-        "from": "bin",
-        "to": "bin",
-        "filter": ["**/*"]
+        "from": "bin/mac/ffmpeg",
+        "to": "bin/ffmpeg"
+      },
+      {
+        "from": "bin/mac/ffprobe",
+        "to": "bin/ffprobe"
+      },
+      {
+        "from": "bin/win/ffmpeg.exe",
+        "to": "bin/ffmpeg.exe"
+      },
+      {
+        "from": "bin/win/ffprobe.exe",
+        "to": "bin/ffprobe.exe"
       }
     ],
     "mac": {
       "category": "public.app-category.video",
-      "target": ["dmg"]
+      "target": ["dmg"],
+      "icon": "public/logo.png"
     },
     "win": {
-      "target": ["nsis"]
+      "target": ["portable"],
+      "icon": "public/logo.png"
     },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+    "portable": {
+      "artifactName": "Klyppr-Portable-${arch}.exe"
     }
   },
   "keywords": ["video", "editor", "silence", "ffmpeg"],
-  "author": "",
+  "author": "Muzaffer Kadir YILMAZ",
   "license": "ISC",
   "dependencies": {
     "fluent-ffmpeg": "^2.1.3",

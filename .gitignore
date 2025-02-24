@@ -1,3 +1,5 @@
 node_modules
 videos
 package-lock.json
+dist
+bin
