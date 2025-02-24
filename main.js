@@ -3,10 +3,10 @@ const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
 const fs = require('fs-extra');
 
-// Development modunda node_modules'tan FFmpeg kullan
+// Use FFmpeg from node_modules in development mode
 const isDev = process.env.NODE_ENV === 'development';
 
-// FFmpeg binary yollarını ayarla
+// Set FFmpeg binary paths
 const ffmpegPath = isDev 
     ? path.join(__dirname, 'bin', 'mac', 'ffmpeg')
     : path.join(process.resourcesPath, 'bin', 'ffmpeg');
@@ -17,35 +17,35 @@ const ffprobePath = isDev
 console.log('FFmpeg Path:', ffmpegPath);
 console.log('FFprobe Path:', ffprobePath);
 
-// FFmpeg binary'lerinin varlığını kontrol et ve izinleri ayarla
+// Check FFmpeg binaries and set permissions
 async function setupFFmpegBinaries() {
     try {
-        // Binary'leri kontrol et
+        // Check binaries
         const [ffmpegExists, ffprobeExists] = await Promise.all([
             fs.pathExists(ffmpegPath),
             fs.pathExists(ffprobePath)
         ]);
 
         if (!ffmpegExists || !ffprobeExists) {
-            throw new Error('FFmpeg veya FFprobe binary\'leri bulunamadı.');
+            throw new Error('FFmpeg or FFprobe binaries not found.');
         }
 
-        // İzinleri ayarla (sadece macOS ve Linux için)
+        // Set permissions (only for macOS and Linux)
         if (process.platform !== 'win32') {
             await Promise.all([
                 fs.chmod(ffmpegPath, '755'),
                 fs.chmod(ffprobePath, '755')
             ]);
-            console.log('FFmpeg binary izinleri ayarlandı');
+            console.log('FFmpeg binary permissions set');
         }
 
-        // FFmpeg yollarını ayarla
+        // Set FFmpeg paths
         ffmpeg.setFfmpegPath(ffmpegPath);
         ffmpeg.setFfprobePath(ffprobePath);
         
-        console.log('FFmpeg kurulumu başarıyla tamamlandı');
+        console.log('FFmpeg setup completed successfully');
     } catch (error) {
-        console.error('FFmpeg kurulum hatası:', error);
+        console.error('FFmpeg setup error:', error);
         throw error;
     }
 }
@@ -65,13 +65,13 @@ function createWindow() {
     mainWindow.loadFile('index.html');
 }
 
-// Uygulama başlatıldığında
+// When application starts
 app.whenReady().then(async () => {
     try {
         await setupFFmpegBinaries();
         createWindow();
     } catch (error) {
-        console.error('Uygulama başlatma hatası:', error);
+        console.error('Application startup error:', error);
         app.quit();
     }
 });
@@ -88,12 +88,12 @@ app.on('activate', () => {
     }
 });
 
-// Input dosyası seçimi
+// Input file selection
 ipcMain.on('select-input', async (event) => {
     const result = await dialog.showOpenDialog(mainWindow, {
         properties: ['openFile'],
         filters: [
-            { name: 'Video Dosyaları', extensions: ['mp4', 'avi', 'mov', 'mkv'] }
+            { name: 'Video Files', extensions: ['mp4', 'avi', 'mov', 'mkv'] }
         ]
     });
 
@@ -102,7 +102,7 @@ ipcMain.on('select-input', async (event) => {
     }
 });
 
-// Output klasörü seçimi
+// Output folder selection
 ipcMain.on('select-output', async (event) => {
     const result = await dialog.showOpenDialog(mainWindow, {
         properties: ['openDirectory']
@@ -113,7 +113,7 @@ ipcMain.on('select-output', async (event) => {
     }
 });
 
-// Video işleme
+// Video processing
 ipcMain.on('start-processing', async (event, params) => {
     try {
         const outputFile = path.join(
@@ -121,21 +121,21 @@ ipcMain.on('start-processing', async (event, params) => {
             `processed_${path.basename(params.inputPath)}`
         );
 
-        // Sessizlikleri tespit et
+        // Detect silences
         const silenceRanges = await detectSilence(params.inputPath, params, event);
 
         if (silenceRanges.length === 0) {
-            event.reply('log', 'Sessizlik bulunamadı, dosya kopyalanıyor...');
+            event.reply('log', 'No silence found, copying file...');
             await fs.copyFile(params.inputPath, outputFile);
             event.reply('completed', true);
             return;
         }
 
-        // Video işleme
+        // Process video
         await processVideo(params.inputPath, outputFile, silenceRanges, event);
         event.reply('completed', true);
     } catch (error) {
-        event.reply('log', `Hata: ${error.message}`);
+        event.reply('log', `Error: ${error.message}`);
         event.reply('completed', false);
     }
 });
@@ -145,14 +145,14 @@ async function detectSilence(inputFile, params, event) {
         let silenceRanges = [];
         let startTime = null;
 
-        event.reply('log', 'Sessizlik analizi başlatılıyor...');
+        event.reply('log', 'Starting silence analysis...');
 
         ffmpeg(inputFile)
             .outputOptions(['-f', 'null'])
             .audioFilters(`silencedetect=noise=${params.silenceDb}dB:d=${params.minSilenceDuration}`)
             .output('-')
             .on('start', command => {
-                event.reply('log', `FFmpeg komutu çalıştırılıyor: ${command}`);
+                event.reply('log', `Running FFmpeg command: ${command}`);
             })
             .on('stderr', line => {
                 const silenceStart = line.match(/silence_start: ([\d.]+)/);
@@ -160,11 +160,11 @@ async function detectSilence(inputFile, params, event) {
 
                 if (silenceStart) {
                     startTime = parseFloat(silenceStart[1]);
-                    event.reply('log', `Sessizlik başlangıcı: ${startTime}s`);
+                    event.reply('log', `Silence start: ${startTime}s`);
                 }
                 if (silenceEnd && startTime !== null) {
                     const endTime = parseFloat(silenceEnd[1]);
-                    event.reply('log', `Sessizlik bitişi: ${endTime}s`);
+                    event.reply('log', `Silence end: ${endTime}s`);
                     
                     silenceRanges.push({
                         start: startTime + parseFloat(params.paddingDuration),
@@ -174,7 +174,7 @@ async function detectSilence(inputFile, params, event) {
                 }
             })
             .on('end', () => {
-                event.reply('log', `${silenceRanges.length} sessizlik aralığı bulundu`);
+                event.reply('log', `Found ${silenceRanges.length} silence ranges`);
                 resolve(silenceRanges);
             })
             .on('error', reject)
@@ -184,27 +184,27 @@ async function detectSilence(inputFile, params, event) {
 
 async function processVideo(inputFile, outputFile, silenceRanges, event) {
     return new Promise((resolve, reject) => {
-        // Sessiz bölümleri atlayan bir select filtresi oluştur
+        // Create a select filter that skips silent parts
         let selectParts = [];
         
-        // İlk bölüm
+        // First part
         if (silenceRanges[0].start > 0) {
             selectParts.push(`between(t,0,${silenceRanges[0].start})`);
         }
 
-        // Sessizlikler arası bölümler
+        // Parts between silences
         for (let i = 0; i < silenceRanges.length - 1; i++) {
             selectParts.push(
                 `between(t,${silenceRanges[i].end},${silenceRanges[i + 1].start})`
             );
         }
 
-        // Son bölüm
+        // Last part
         const lastSilence = silenceRanges[silenceRanges.length - 1];
         selectParts.push(`gte(t,${lastSilence.end})`);
 
         const selectFilter = selectParts.join('+');
-        event.reply('log', 'Video işleme başlatılıyor...');
+        event.reply('log', 'Starting video processing...');
 
         ffmpeg(inputFile)
             .videoFilters([
@@ -224,21 +224,21 @@ async function processVideo(inputFile, outputFile, silenceRanges, event) {
                 '-movflags', '+faststart'
             ])
             .on('start', command => {
-                event.reply('log', `FFmpeg komutu çalıştırılıyor: ${command}`);
+                event.reply('log', `Running FFmpeg command: ${command}`);
             })
             .on('progress', progress => {
                 const percent = progress.percent ? progress.percent.toFixed(1) : '0';
                 event.reply('progress', {
-                    status: `İşleniyor: ${percent}%`,
+                    status: `Processing: ${percent}%`,
                     percent: parseFloat(percent)
                 });
             })
             .on('end', () => {
-                event.reply('log', 'Video işleme tamamlandı');
+                event.reply('log', 'Video processing completed');
                 resolve();
             })
             .on('error', (err) => {
-                event.reply('log', `Hata: ${err.message}`);
+                event.reply('log', `Error: ${err.message}`);
                 reject(err);
             })
             .save(outputFile);

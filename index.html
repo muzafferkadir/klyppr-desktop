@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Klyppr - Video Sessizlik Düzenleyici</title>
+    <title>Klyppr - Video Silence Editor</title>
     <meta charset="UTF-8">
     <style>
         body {
@@ -117,43 +117,43 @@
 </head>
 <body>
     <div class="container">
-        <h1>Klyppr - Video Sessizlik Düzenleyici</h1>
+        <h1>Klyppr - Video Silence Editor</h1>
         
         <div class="form-group">
-            <label>Giriş Videosu:</label>
+            <label>Input Video:</label>
             <div class="input-group">
-                <input type="text" id="inputPath" readonly placeholder="Video dosyası seçin...">
-                <button class="browse-btn" onclick="selectInput()">Gözat</button>
+                <input type="text" id="inputPath" readonly placeholder="Select video file...">
+                <button class="browse-btn" onclick="selectInput()">Browse</button>
             </div>
         </div>
 
         <div class="form-group">
-            <label>Çıkış Klasörü:</label>
+            <label>Output Folder:</label>
             <div class="input-group">
-                <input type="text" id="outputPath" readonly placeholder="Çıkış klasörü seçin...">
-                <button class="browse-btn" onclick="selectOutput()">Gözat</button>
+                <input type="text" id="outputPath" readonly placeholder="Select output folder...">
+                <button class="browse-btn" onclick="selectOutput()">Browse</button>
             </div>
         </div>
 
         <div class="form-group">
-            <label>Sessizlik Eşiği (dB):</label>
+            <label>Silence Threshold (dB):</label>
             <input type="number" id="silenceDb" value="-45" step="1">
         </div>
 
         <div class="form-group">
-            <label>Minimum Sessizlik Süresi (saniye):</label>
+            <label>Minimum Silence Duration (seconds):</label>
             <input type="number" id="minSilenceDuration" value="0.6" step="0.1" min="0">
         </div>
 
         <div class="form-group">
-            <label>Padding Süresi (saniye):</label>
+            <label>Padding Duration (seconds):</label>
             <input type="number" id="paddingDuration" value="0.05" step="0.01" min="0">
         </div>
 
-        <button id="startBtn" onclick="startProcessing()" disabled>İşlemi Başlat</button>
+        <button id="startBtn" onclick="startProcessing()" disabled>Start Processing</button>
 
         <div id="progress">
-            <div>İşlem durumu: <span id="status">Hazırlanıyor...</span></div>
+            <div>Processing status: <span id="status">Preparing...</span></div>
             <div class="progress-bar">
                 <div class="progress-bar-fill" id="progressBar"></div>
             </div>
@@ -185,43 +185,37 @@
             document.getElementById('startBtn').disabled = true;
             document.getElementById('progress').style.display = 'block';
             document.getElementById('log').style.display = 'block';
-            document.getElementById('status').textContent = 'İşlem başlatılıyor...';
+            document.getElementById('status').textContent = 'Starting process...';
 
             ipcRenderer.send('start-processing', params);
         }
 
-        // Input path seçildiğinde
         ipcRenderer.on('input-selected', (event, path) => {
             document.getElementById('inputPath').value = path;
             updateStartButton();
         });
 
-        // Output path seçildiğinde
         ipcRenderer.on('output-selected', (event, path) => {
             document.getElementById('outputPath').value = path;
             updateStartButton();
         });
 
-        // İlerleme durumu güncellendiğinde
         ipcRenderer.on('progress', (event, data) => {
             document.getElementById('status').textContent = data.status;
             document.getElementById('progressBar').style.width = `${data.percent}%`;
         });
 
-        // Log mesajı geldiğinde
         ipcRenderer.on('log', (event, message) => {
             const log = document.getElementById('log');
             log.innerHTML += message + '<br>';
             log.scrollTop = log.scrollHeight;
         });
 
-        // İşlem tamamlandığında
         ipcRenderer.on('completed', (event, success) => {
             document.getElementById('startBtn').disabled = false;
-            document.getElementById('status').textContent = success ? 'İşlem tamamlandı!' : 'Hata oluştu!';
+            document.getElementById('status').textContent = success ? 'Process completed!' : 'Error occurred!';
         });
 
-        // Başlat butonunun durumunu güncelle
         function updateStartButton() {
             const inputPath = document.getElementById('inputPath').value;
             const outputPath = document.getElementById('outputPath').value;
