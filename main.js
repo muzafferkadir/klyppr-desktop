@@ -14,7 +14,7 @@ async function setupFFmpegBinaries() {
     let ffmpegPath, ffprobePath;
     
     if (isDevelopment) {
-        // Development ortamında
+        // Development environment
         if (isWindows) {
             ffmpegPath = path.join(__dirname, 'bin', 'win', 'ffmpeg.exe');
             ffprobePath = path.join(__dirname, 'bin', 'win', 'ffprobe.exe');
@@ -23,7 +23,7 @@ async function setupFFmpegBinaries() {
             ffprobePath = path.join(__dirname, 'bin', 'mac', 'ffprobe');
         }
     } else {
-        // Production ortamında
+        // Production environment
         if (isWindows) {
             ffmpegPath = path.join(process.resourcesPath, 'bin', 'ffmpeg.exe');
             ffprobePath = path.join(process.resourcesPath, 'bin', 'ffprobe.exe');
@@ -36,9 +36,16 @@ async function setupFFmpegBinaries() {
     console.log('FFmpeg Path:', ffmpegPath);
     console.log('FFprobe Path:', ffprobePath);
 
+    // Check if binaries exist
     if (!fs.existsSync(ffmpegPath) || !fs.existsSync(ffprobePath)) {
+        console.error('FFmpeg binary not found at:', ffmpegPath);
+        console.error('FFprobe binary not found at:', ffprobePath);
         throw new Error('FFmpeg or FFprobe binaries not found.');
     }
+
+    // Set FFmpeg paths
+    ffmpeg.setFfmpegPath(ffmpegPath);
+    ffmpeg.setFfprobePath(ffprobePath);
 
     return { ffmpegPath, ffprobePath };
 }
