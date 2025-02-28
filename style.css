@@ -18,20 +18,27 @@
 body {
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     margin: 0;
-    padding: 20px;
+    padding: 10px;
     background-color: var(--background);
     color: var(--text);
     line-height: 1.6;
 }
 
 .container {
-    max-width: 800px;
+    max-width: 700px;
     margin: 0 auto;
     background: var(--card);
-    padding: 2rem;
+    padding: 1rem 1.5rem;
     border-radius: 16px;
     box-shadow: var(--shadow);
     transition: var(--transition);
+}
+
+.title {
+    font-size: 2rem;
+    font-weight: 600;
+    position: relative;
+    line-height: 1.2;
 }
 
 .container:hover {
@@ -42,11 +49,12 @@ body {
 h1 {
     text-align: center;
     color: var(--primary);
-    margin-bottom: 2rem;
-    font-size: 2.5rem;
+    margin: 0.5rem 0 1.5rem 0;
+    font-size: 2rem;
     font-weight: 600;
     position: relative;
-    padding-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    line-height: 1.2;
 }
 
 h1::after {
@@ -55,15 +63,15 @@ h1::after {
     bottom: 0;
     left: 50%;
     transform: translateX(-50%);
-    width: 100px;
-    height: 4px;
+    width: 60px;
+    height: 3px;
     background: var(--primary);
     border-radius: 2px;
 }
 
 /* Form Elements */
 .form-group {
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
 }
 
 .form-group label {
@@ -83,17 +91,21 @@ h1::after {
 input[type="text"], input[type="number"] {
     width: 100%;
     padding: 0.75rem 1rem;
-    border: 2px solid var(--border);
+    border: 1px solid var(--border);
     border-radius: 8px;
     font-size: 0.95rem;
     transition: var(--transition);
-    background: var(--background);
+    background: var(--card);
+}
+
+input[type="text"]:hover, input[type="number"]:hover {
+    border-color: var(--primary-light);
 }
 
 input[type="text"]:focus, input[type="number"]:focus {
     border-color: var(--primary);
     outline: none;
-    box-shadow: 0 0 0 3px var(--primary-light);
+    box-shadow: 0 0 0 2px var(--primary-light);
 }
 
 input[type="number"] {
@@ -168,61 +180,60 @@ button:disabled {
 /* Preset Buttons */
 .button-group {
     display: flex;
-    gap: 1rem;
-    margin: 2rem 0;
+    gap: 0.75rem;
+    margin: 1rem 0;
     padding: 0.5rem;
     background: var(--background);
     border-radius: 12px;
+    justify-content: center;
 }
 
 .preset-btn {
-    flex: 1;
-    padding: 1rem;
+    flex: 0 1 auto;
+    padding: 0.75rem 1.5rem;
     background: transparent;
     color: var(--text);
     position: relative;
     overflow: hidden;
     z-index: 1;
-}
-
-.preset-btn::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: var(--primary);
+    font-size: 0.9rem;
+    min-width: 140px;
     border-radius: 8px;
-    transform: scaleX(0);
-    transform-origin: right;
-    transition: transform 0.3s ease;
-    z-index: -1;
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
 }
 
-.preset-btn:hover::before {
-    transform: scaleX(1);
-    transform-origin: left;
+.preset-btn:hover:not(.active) {
+    border-color: var(--primary);
+    background: transparent;
+    color: var(--primary);
+    transform: translateY(-1px);
 }
 
 .preset-btn.active {
     background: var(--primary);
     color: white;
-    transform: scale(1.05);
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2);
 }
 
 /* Settings Group */
 .settings-group {
     background: var(--background);
-    padding: 1.5rem;
+    padding: 1.25rem;
     border-radius: 12px;
-    margin: 1.5rem 0;
-    display: none;
-    animation: slideDown 0.3s ease;
+    margin: 1rem 0;
+    border: 1px solid var(--border);
+    transition: var(--transition);
 }
 
-.settings-group.visible {
-    display: block;
+.settings-group:hover {
+    border-color: var(--primary-light);
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.1);
+}
+
+.settings-group .form-group:last-child {
+    margin-bottom: 0;
 }
 
 /* Progress Bar */
