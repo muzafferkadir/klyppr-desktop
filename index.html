@@ -3,117 +3,7 @@
 <head>
     <title>Klyppr - Automatic Video Silence Clipper</title>
     <meta charset="UTF-8">
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-            color: #333;
-        }
-
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-
-        h1 {
-            text-align: center;
-            color: #2196F3;
-            margin-bottom: 30px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-        }
-
-        .input-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        input[type="text"], input[type="number"] {
-            flex: 1;
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-
-        input[type="number"] {
-            width: 100px;
-        }
-
-        button {
-            background-color: #2196F3;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background-color 0.3s;
-        }
-
-        button:hover {
-            background-color: #1976D2;
-        }
-
-        button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-
-        .browse-btn {
-            white-space: nowrap;
-        }
-
-        #progress {
-            margin-top: 20px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 4px;
-            display: none;
-        }
-
-        .progress-bar {
-            height: 10px;
-            background: #e9ecef;
-            border-radius: 5px;
-            margin-top: 10px;
-            overflow: hidden;
-        }
-
-        .progress-bar-fill {
-            height: 100%;
-            background: #2196F3;
-            width: 0%;
-            transition: width 0.3s;
-        }
-
-        #log {
-            margin-top: 20px;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 4px;
-            max-height: 200px;
-            overflow-y: auto;
-            font-family: monospace;
-            font-size: 12px;
-            display: none;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
@@ -135,19 +25,27 @@
             </div>
         </div>
 
-        <div class="form-group">
-            <label>Silence Threshold (dB):</label>
-            <input type="number" id="silenceDb" value="-45" step="1">
+        <div class="button-group">
+            <button class="preset-btn active" data-preset="recommended">Önerilen</button>
+            <button class="preset-btn" data-preset="fast">Ekstra Hızlı</button>
+            <button class="preset-btn" data-preset="custom">Özel</button>
         </div>
 
-        <div class="form-group">
-            <label>Minimum Silence Duration (seconds):</label>
-            <input type="number" id="minSilenceDuration" value="0.6" step="0.1" min="0">
-        </div>
+        <div id="customSettings" class="settings-group">
+            <div class="form-group">
+                <label>Silence Threshold (dB):</label>
+                <input type="number" id="silenceDb" value="-45" step="1">
+            </div>
 
-        <div class="form-group">
-            <label>Padding Duration (seconds):</label>
-            <input type="number" id="paddingDuration" value="0.05" step="0.01" min="0">
+            <div class="form-group">
+                <label>Minimum Silence Duration (seconds):</label>
+                <input type="number" id="minSilenceDuration" value="0.6" step="0.1" min="0">
+            </div>
+
+            <div class="form-group">
+                <label>Padding Duration (seconds):</label>
+                <input type="number" id="paddingDuration" value="0.05" step="0.01" min="0">
+            </div>
         </div>
 
         <button id="startBtn" onclick="startProcessing()" disabled>Start Processing</button>
@@ -165,6 +63,44 @@
     <script>
         const { ipcRenderer } = require('electron');
         
+        // Preset değerleri
+        const presets = {
+            recommended: {
+                silenceDb: -45,
+                minSilenceDuration: 0.6,
+                paddingDuration: 0.05
+            },
+            fast: {
+                silenceDb: -30,
+                minSilenceDuration: 0.3,
+                paddingDuration: 0.02
+            }
+        };
+
+        // Preset butonları için olay dinleyicileri
+        document.querySelectorAll('.preset-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                // Aktif butonu değiştir
+                document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+
+                const preset = button.dataset.preset;
+                const customSettings = document.getElementById('customSettings');
+
+                // Özel ayarları göster/gizle
+                if (preset === 'custom') {
+                    customSettings.classList.add('visible');
+                } else {
+                    customSettings.classList.remove('visible');
+                    // Preset değerlerini ayarla
+                    const values = presets[preset];
+                    document.getElementById('silenceDb').value = values.silenceDb;
+                    document.getElementById('minSilenceDuration').value = values.minSilenceDuration;
+                    document.getElementById('paddingDuration').value = values.paddingDuration;
+                }
+            });
+        });
+
         function selectInput() {
             ipcRenderer.send('select-input');
         }
@@ -186,6 +122,9 @@
             document.getElementById('progress').style.display = 'block';
             document.getElementById('log').style.display = 'block';
             document.getElementById('status').textContent = 'Starting process...';
+
+            // Progress bar'ı sıfırla
+            document.getElementById('progressBar').style.width = '0%';
 
             ipcRenderer.send('start-processing', params);
         }
@@ -214,6 +153,15 @@
         ipcRenderer.on('completed', (event, success) => {
             document.getElementById('startBtn').disabled = false;
             document.getElementById('status').textContent = success ? 'Process completed!' : 'Error occurred!';
+            if (success) {
+                // İşlem tamamlandığında progress bar'ı %100'e tamamla
+                document.getElementById('progressBar').style.width = '100%';
+                // 1 saniye sonra progress'i gizle
+                setTimeout(() => {
+                    document.getElementById('progress').style.display = 'none';
+                    document.getElementById('progressBar').style.width = '0%';
+                }, 1000);
+            }
         });
 
         function updateStartButton() {
@@ -221,6 +169,9 @@
             const outputPath = document.getElementById('outputPath').value;
             document.getElementById('startBtn').disabled = !(inputPath && outputPath);
         }
+
+        // Başlangıçta özel ayarları gizle
+        document.getElementById('customSettings').classList.remove('visible');
     </script>
 </body>
 </html> 
