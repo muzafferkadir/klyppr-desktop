@@ -1,5 +1,7 @@
 # Klyppr Desktop
 
+> **📋 Latest Updates:** Fixed audio sync issue and updated UI
+
 This is the desktop version of [Klyppr](https://github.com/muzafferkadir/klyppr), a tool for editing video silence.
 
 ## Features
