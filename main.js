@@ -1,7 +1,10 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
 const fs = require('fs-extra');
+
+// Remove default menu
+Menu.setApplicationMenu(null);
 
 // Config dosyası yolu
 const configPath = path.join(app.getPath('userData'), 'config.json');
@@ -76,11 +79,10 @@ let mainWindow;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
-        width: 800,
-        height: 900,
-        minWidth: 800,
-        maxWidth: 800,
-        minHeight: 600,
+        width: 1400,
+        height: 800,
+        minWidth: 1200,
+        minHeight: 700,
         show: false,
         titleBarStyle: 'default',
         webPreferences: {
@@ -90,6 +92,11 @@ function createWindow() {
     });
 
     mainWindow.loadFile('index.html');
+    
+    // Open DevTools in development
+    // if (process.env.NODE_ENV === 'development') {
+    //     mainWindow.webContents.openDevTools();
+    // }
     
     // Show window when ready to prevent visual flash
     mainWindow.once('ready-to-show', () => {
@@ -161,6 +168,11 @@ ipcMain.on('load-last-output', (event) => {
 
 // Video processing
 ipcMain.on('start-processing', async (event, params) => {
+    console.log('========================================');
+    console.log('RECEIVED start-processing IPC message');
+    console.log('Params:', params);
+    console.log('========================================');
+    
     try {
         const outputFile = path.join(
             params.outputPath,
