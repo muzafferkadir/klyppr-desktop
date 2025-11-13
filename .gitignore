@@ -3,3 +3,6 @@ videos
 package-lock.json
 dist
 bin
+.klyppr_temp
+.concat_list.txt
+temp_ffmpeg

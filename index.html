@@ -59,18 +59,29 @@
                         <div class="settings-grid">
                             <div class="form-group">
                                 <label class="form-label">🔇 Silence Threshold (dB)</label>
-                                <input type="number" id="silenceDb" value="-45" step="1" class="number-input">
+                                <input type="number" id="silenceDb" value="-35" step="1" class="number-input">
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label">⏱️ Min. Silence Duration (sec)</label>
-                                <input type="number" id="minSilenceDuration" value="0.6" step="0.1" min="0" class="number-input">
+                                <input type="number" id="minSilenceDuration" value="0.5" step="0.1" min="0" class="number-input">
                             </div>
 
                             <div class="form-group">
                                 <label class="form-label">📏 Padding Duration (sec)</label>
                                 <input type="number" id="paddingDuration" value="0.05" step="0.01" min="0" class="number-input">
                             </div>
+                        </div>
+                        
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="normalizeAudio" checked class="checkbox-input">
+                                <span class="checkbox-text">
+                                    <span class="checkbox-icon">🎚️</span>
+                                    <span class="checkbox-title">Normalize Audio (YouTube Standard)</span>
+                                    <span class="checkbox-desc">Adjust volume to -16 LUFS (MrBeast/YouTube level)</span>
+                                </span>
+                            </label>
                         </div>
                     </div>
                 </section>
@@ -97,6 +108,13 @@
                 <section class="log-section">
                     <div id="log" class="log-container"></div>
                 </section>
+
+                <section class="result-section" id="resultSection" style="display: none;">
+                    <button id="showInFolderBtn" class="show-folder-btn" onclick="showInFolder()">
+                        <span class="btn-icon">📁</span>
+                        <span class="btn-text">Show Video in Folder</span>
+                    </button>
+                </section>
             </main>
         </div>
     </div>
@@ -107,8 +125,8 @@
         // Preset değerleri
         const presets = {
             recommended: {
-                silenceDb: -45,
-                minSilenceDuration: 0.6,
+                silenceDb: -35,
+                minSilenceDuration: 0.5,
                 paddingDuration: 0.05
             },
             fast: {
@@ -147,16 +165,21 @@
                 outputPath: document.getElementById('outputPath').value,
                 silenceDb: document.getElementById('silenceDb').value,
                 minSilenceDuration: document.getElementById('minSilenceDuration').value,
-                paddingDuration: document.getElementById('paddingDuration').value
+                paddingDuration: document.getElementById('paddingDuration').value,
+                normalizeAudio: document.getElementById('normalizeAudio').checked
             };
 
             document.getElementById('startBtn').disabled = true;
             document.getElementById('progress').style.display = 'block';
             document.getElementById('log').style.display = 'block';
+            document.getElementById('resultSection').style.display = 'none';
             document.getElementById('status').textContent = 'Starting process...';
 
             // Progress bar'ı sıfırla
             document.getElementById('progressBar').style.width = '0%';
+            
+            // Log'u temizle
+            document.getElementById('log').innerHTML = '';
 
             ipcRenderer.send('start-processing', params);
         }
@@ -182,12 +205,20 @@
             log.scrollTop = log.scrollHeight;
         });
 
-        ipcRenderer.on('completed', (event, success) => {
+        let currentOutputFile = null;
+
+        ipcRenderer.on('completed', (event, result) => {
             document.getElementById('startBtn').disabled = false;
-            document.getElementById('status').textContent = success ? 'Process completed!' : 'Error occurred!';
-            if (success) {
+            document.getElementById('status').textContent = result.success ? 'Process completed!' : 'Error occurred!';
+            if (result.success) {
+                currentOutputFile = result.outputFile;
+                
                 // İşlem tamamlandığında progress bar'ı %100'e tamamla
                 document.getElementById('progressBar').style.width = '100%';
+                
+                // Show in folder butonu göster
+                document.getElementById('resultSection').style.display = 'block';
+                
                 // 1 saniye sonra progress'i gizle
                 setTimeout(() => {
                     document.getElementById('progress').style.display = 'none';
@@ -196,11 +227,22 @@
             }
         });
 
+        function showInFolder() {
+            if (currentOutputFile) {
+                ipcRenderer.send('show-in-folder', currentOutputFile);
+            }
+        }
+
         function updateStartButton() {
             const inputPath = document.getElementById('inputPath').value;
             const outputPath = document.getElementById('outputPath').value;
             document.getElementById('startBtn').disabled = !(inputPath && outputPath);
         }
+
+        // Sayfa yüklendiğinde son output path'i yükle
+        window.addEventListener('DOMContentLoaded', () => {
+            ipcRenderer.send('load-last-output');
+        });
     </script>
 </body>
 </html> 

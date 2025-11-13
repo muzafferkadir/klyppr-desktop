@@ -184,11 +184,62 @@ section {
     border-radius: var(--border-radius);
     border: 1px solid var(--border);
     transition: var(--transition);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing);
 }
 
 .settings-group:hover {
     border-color: var(--primary-light);
     box-shadow: var(--shadow);
+}
+
+/* Checkbox Group */
+.checkbox-group {
+    padding-top: var(--spacing);
+    border-top: 1px solid var(--border);
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.checkbox-input {
+    width: 20px;
+    height: 20px;
+    margin-top: 2px;
+    cursor: pointer;
+    accent-color: var(--primary);
+}
+
+.checkbox-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex: 1;
+}
+
+.checkbox-icon {
+    font-size: 1.25rem;
+    margin-right: 0.25rem;
+}
+
+.checkbox-title {
+    font-weight: 600;
+    color: var(--text);
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+}
+
+.checkbox-desc {
+    font-size: 0.75rem;
+    color: var(--text-light);
+    line-height: 1.4;
 }
 
 /* Buttons */
@@ -404,6 +455,39 @@ button {
     line-height: 1.4;
     border: 1px solid var(--border);
     animation: slideDown 0.3s ease;
+}
+
+/* Result Section */
+.result-section {
+    padding: var(--spacing);
+    background: linear-gradient(135deg, #f0fff4 0%, #c6f6d5 100%);
+    border-radius: var(--border-radius);
+    border: 2px solid var(--success);
+    animation: slideDown 0.3s ease;
+    text-align: center;
+}
+
+.show-folder-btn {
+    width: 100%;
+    padding: 1rem 2rem;
+    font-size: 1rem;
+    font-weight: 600;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    transition: var(--transition);
+    min-height: 50px;
+}
+
+.show-folder-btn:hover {
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary) 100%);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.show-folder-btn:active {
+    transform: translateY(0);
 }
 
 /* Animations */
