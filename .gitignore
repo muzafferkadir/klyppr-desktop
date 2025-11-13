@@ -4,3 +4,5 @@ package-lock.json
 dist
 .klyppr_temp
 .concat_list.txt
+temp_ffmpeg
+bin/win/*.exe
