@@ -77,7 +77,7 @@ body {
 
 /* Header */
 .header {
-    padding: var(--spacing-xl) var(--spacing-xl) var(--spacing-lg);
+    padding: var(--spacing) var(--spacing-lg) var(--spacing-sm);
     text-align: center;
     border-bottom: 1px solid var(--glass-border);
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 100%);
@@ -87,8 +87,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: var(--spacing);
-    margin-bottom: var(--spacing-xs);
+    gap: var(--spacing-sm);
+    margin-bottom: 0;
 }
 
 .logo-icon {
@@ -98,7 +98,7 @@ body {
 }
 
 .title {
-    font-size: 2rem;
+    font-size: 1.5rem;
     font-weight: 700;
     letter-spacing: -0.02em;
     margin: 0;
@@ -117,9 +117,10 @@ body {
     padding: var(--spacing-lg);
     display: grid;
     grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto auto 1fr auto;
-    gap: var(--spacing-lg);
+    grid-template-rows: auto auto auto auto auto;
+    gap: var(--spacing);
     overflow-y: auto;
+    align-items: start;
 }
 
 /* File Selection - Spans full width */
@@ -132,18 +133,20 @@ body {
 
 /* Presets Section */
 .presets-section {
-    grid-column: 1;
+    grid-column: 1 / -1;
     display: flex;
     flex-direction: column;
     gap: var(--spacing);
+    align-self: start;
 }
 
 /* Settings Section */
 .settings-section {
-    grid-column: 2;
+    grid-column: 1 / -1;
     display: flex;
     flex-direction: column;
     gap: var(--spacing);
+    align-self: start;
 }
 
 /* Action + Progress + Log - Span full width */
@@ -151,6 +154,15 @@ body {
 .progress-section,
 .log-section {
     grid-column: 1 / -1;
+}
+
+.action-section {
+    margin-bottom: 0;
+}
+
+.progress-section {
+    margin-top: 0;
+    margin-bottom: 0;
 }
 
 .result-section {
@@ -203,7 +215,8 @@ body {
 }
 
 .file-input,
-.number-input {
+.number-input,
+.select-input {
     flex: 1;
     padding: 0.75rem 1rem;
     background: rgba(255, 255, 255, 0.05);
@@ -216,7 +229,8 @@ body {
 }
 
 .file-input:focus,
-.number-input:focus {
+.number-input:focus,
+.select-input:focus {
     outline: none;
     border-color: var(--accent);
     background: rgba(255, 255, 255, 0.08);
@@ -224,6 +238,20 @@ body {
 
 .number-input {
     min-width: 100px;
+}
+
+.select-input {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    padding-right: 2.5rem;
+}
+
+.select-input option {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
 }
 
 /* Buttons */
@@ -327,8 +355,8 @@ button {
 }
 
 .settings-grid {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
     gap: var(--spacing);
 }
 
@@ -407,7 +435,7 @@ button {
 /* Progress */
 .progress-container {
     display: none;
-    padding: var(--spacing-lg);
+    padding: var(--spacing);
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--glass-border);
     border-radius: var(--border-radius);
@@ -453,8 +481,14 @@ button {
     gap: var(--spacing-sm);
 }
 
+.log-header {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: stretch;
+}
+
 .log-toggle {
-    width: 100%;
+    flex: 1;
     padding: 0.75rem 1rem;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--glass-border);
@@ -464,6 +498,7 @@ button {
     justify-content: space-between;
     align-items: center;
     transition: var(--transition);
+    cursor: pointer;
 }
 
 .log-toggle:hover {
@@ -478,6 +513,43 @@ button {
 .log-toggle-icon {
     font-size: 0.75rem;
     transition: var(--transition);
+}
+
+.log-copy-btn {
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-sm);
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: var(--transition);
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.log-copy-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--accent);
+}
+
+.log-copy-btn.copied {
+    background: rgba(0, 255, 0, 0.1);
+    border-color: var(--success);
+    color: var(--success);
+}
+
+.log-copy-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.log-copy-text {
+    font-size: 0.875rem;
 }
 
 .log-container-wrapper {

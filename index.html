@@ -58,6 +58,27 @@
                     </div>
                 </section>
 
+                <section class="action-section">
+                    <button id="startBtn" onclick="startProcessing()" disabled class="start-btn" data-tooltip="Select input and output first">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
+                        <span class="btn-text">Start Processing</span>
+                    </button>
+                </section>
+
+                <section class="progress-section">
+                    <div id="progress" class="progress-container">
+                        <div class="progress-info">
+                            <span class="progress-label">Processing status:</span>
+                            <span id="status" class="progress-status">Preparing...</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-bar-fill" id="progressBar"></div>
+                        </div>
+                    </div>
+                </section>
+
                 <section class="presets-section">
                     <h3 class="section-title">
                         <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -78,8 +99,8 @@
                             <svg class="preset-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
                             </svg>
-                            <span class="preset-name">Extra Fast</span>
-                            <span class="preset-desc">Quick processing</span>
+                            <span class="preset-name">Aggressive</span>
+                            <span class="preset-desc">Tight detection</span>
                         </button>
                     </div>
                 </section>
@@ -126,6 +147,20 @@
                                 </label>
                                 <input type="number" id="paddingDuration" value="0.05" step="0.01" min="0" class="number-input">
                             </div>
+
+                            <div class="form-group">
+                                <label class="form-label" data-tooltip="Video quality preset - Higher quality = slower processing">
+                                    <svg class="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+                                    </svg>
+                                    Video Quality
+                                </label>
+                                <select id="qualityPreset" class="select-input">
+                                    <option value="fast">Fast (Lower Quality, Faster)</option>
+                                    <option value="medium" selected>Medium (Balanced)</option>
+                                    <option value="high">High (Best Quality, Slower)</option>
+                                </select>
+                            </div>
                         </div>
                         
                         <div class="checkbox-group">
@@ -145,32 +180,20 @@
                     </div>
                 </section>
 
-                <section class="action-section">
-                    <button id="startBtn" onclick="startProcessing()" disabled class="start-btn" data-tooltip="Select input and output first">
-                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polygon points="5 3 19 12 5 21 5 3"/>
-                        </svg>
-                        <span class="btn-text">Start Processing</span>
-                    </button>
-                </section>
-
-                <section class="progress-section">
-                    <div id="progress" class="progress-container">
-                        <div class="progress-info">
-                            <span class="progress-label">Processing status:</span>
-                            <span id="status" class="progress-status">Preparing...</span>
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-bar-fill" id="progressBar"></div>
-                        </div>
-                    </div>
-                </section>
-
                 <section class="log-section" id="logSection" style="display: none;">
-                    <button class="log-toggle" onclick="toggleLogs()" id="logToggleBtn">
-                        <span class="log-toggle-text">Show Processing Logs</span>
-                        <span class="log-toggle-icon">▼</span>
-                    </button>
+                    <div class="log-header">
+                        <button class="log-toggle" onclick="toggleLogs()" id="logToggleBtn">
+                            <span class="log-toggle-text">Show Processing Logs</span>
+                            <span class="log-toggle-icon">▼</span>
+                        </button>
+                        <button class="log-copy-btn" onclick="copyLogs()" id="logCopyBtn" title="Copy all logs">
+                            <svg class="log-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                            </svg>
+                            <span class="log-copy-text">Copy</span>
+                        </button>
+                    </div>
                     <div id="logContainer" class="log-container-wrapper" style="display: none;">
                         <div id="log" class="log-container"></div>
                     </div>
@@ -228,7 +251,8 @@
                 silenceDb: document.getElementById('silenceDb').value,
                 minSilenceDuration: document.getElementById('minSilenceDuration').value,
                 paddingDuration: document.getElementById('paddingDuration').value,
-                normalizeAudio: document.getElementById('normalizeAudio').checked
+                normalizeAudio: document.getElementById('normalizeAudio').checked,
+                qualityPreset: document.getElementById('qualityPreset').value
             };
 
             console.log('Processing params:', params);
@@ -329,6 +353,32 @@
                 toggleIcon.textContent = '▼';
                 toggleBtn.querySelector('.log-toggle-text').textContent = 'Show Processing Logs';
             }
+        }
+
+        // Copy logs function
+        function copyLogs() {
+            const logElement = document.getElementById('log');
+            const logText = logElement.innerText || logElement.textContent;
+            
+            if (!logText.trim()) {
+                return;
+            }
+
+            navigator.clipboard.writeText(logText).then(() => {
+                const copyBtn = document.getElementById('logCopyBtn');
+                const copyText = copyBtn.querySelector('.log-copy-text');
+                const originalText = copyText.textContent;
+                
+                copyText.textContent = 'Copied!';
+                copyBtn.classList.add('copied');
+                
+                setTimeout(() => {
+                    copyText.textContent = originalText;
+                    copyBtn.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy logs:', err);
+            });
         }
 
         // Modal functions
