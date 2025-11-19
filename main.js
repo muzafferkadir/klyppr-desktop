@@ -70,13 +70,22 @@ function saveConfig(config) {
 function getFFmpegPaths() {
     const { isDevelopment, isWindows } = PLATFORM;
     const baseDir = isDevelopment ? __dirname : process.resourcesPath;
-    const platformDir = isWindows ? 'win' : 'mac';
     const extension = isWindows ? '.exe' : '';
     
-    return {
-        ffmpeg: path.join(baseDir, 'bin', platformDir, `ffmpeg${extension}`),
-        ffprobe: path.join(baseDir, 'bin', platformDir, `ffprobe${extension}`)
-    };
+    if (isDevelopment) {
+        // Development: bin/win/ or bin/mac/
+        const platformDir = isWindows ? 'win' : 'mac';
+        return {
+            ffmpeg: path.join(baseDir, 'bin', platformDir, `ffmpeg${extension}`),
+            ffprobe: path.join(baseDir, 'bin', platformDir, `ffprobe${extension}`)
+        };
+    } else {
+        // Production: bin/ (no platform subdirectory)
+        return {
+            ffmpeg: path.join(baseDir, 'bin', `ffmpeg${extension}`),
+            ffprobe: path.join(baseDir, 'bin', `ffprobe${extension}`)
+        };
+    }
 }
 
 async function setupFFmpegBinaries() {

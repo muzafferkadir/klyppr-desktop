@@ -49,9 +49,16 @@
     },
     "win": {
       "target": [
-        "portable"
+        "nsis"
       ],
       "icon": "public/logo.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "perMachine": true
     },
     "portable": {
       "artifactName": "Klyppr-Portable-${arch}.exe"
