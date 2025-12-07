@@ -20,12 +20,34 @@ This is the desktop version of [Klyppr](https://github.com/muzafferkadir/klyppr)
 
 1. Download the latest release for your operating system
 
+[Windows (x64)](https://github.com/muzafferkadir/klyppr-desktop/releases/download/v1.2.0/Klyppr.Setup.1.2.0.x64.exe)
 [MacOS (arm64)](https://github.com/muzafferkadir/klyppr-desktop/releases/download/v1.2.0/Klyppr-1.2.0-arm64.dmg)
 
-[Windows (x64)](https://github.com/muzafferkadir/klyppr-desktop/releases/download/v1.2.0/Klyppr.Setup.1.2.0.x64.exe)
 
-3. Install the application
-4. Launch Klyppr Desktop
+## macOS Instructions (App Not Signed)
+
+1. Download the latest release for your operating system.
+2. Move the application to your **Applications** folder.
+3. Try launching the app once — macOS may show this warning:
+
+**“The app is damaged and can’t be opened. You should move it to the Trash.”**
+
+### How to open it:
+
+1. Go to **System Settings → Privacy & Security**.
+2. Click **“Allow Anyway”** (or **“Open Anyway”**).
+3. Launch the app again.
+
+### Alternative (Terminal):
+
+```sh
+sudo xattr -rd com.apple.quarantine /Applications/Klyppr.app
+```
+
+After this, the app will open normally.
+
+4. Launch **Klyppr Desktop**.
+
 
 ## Development Setup
 
