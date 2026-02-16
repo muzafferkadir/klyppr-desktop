@@ -6,27 +6,27 @@
     --glass-bg: rgba(20, 20, 20, 0.7);
     --glass-border: rgba(255, 255, 255, 0.1);
     --glass-hover: rgba(30, 30, 30, 0.8);
-    
+
     --text-primary: #ffffff;
     --text-secondary: #a3a3a3;
     --text-muted: #666666;
-    
+
     --accent: #ffffff;
     --accent-hover: #e5e5e5;
     --success: #00ff00;
     --error: #ff0000;
     --warning: #ffaa00;
-    
+
     --border-radius: 12px;
     --border-radius-sm: 8px;
     --border-radius-lg: 16px;
-    
+
     --spacing-xs: 0.5rem;
     --spacing-sm: 0.75rem;
     --spacing: 1rem;
     --spacing-lg: 1.5rem;
     --spacing-xl: 2rem;
-    
+
     --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     --shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.7);
@@ -721,8 +721,13 @@ button {
 
 /* Animations */
 @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
 }
 
 @keyframes modalSlide {
@@ -730,6 +735,7 @@ button {
         opacity: 0;
         transform: translateY(30px) scale(0.95);
     }
+
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
@@ -741,9 +747,11 @@ button {
         transform: scale(0) rotate(-45deg);
         opacity: 0;
     }
+
     50% {
         transform: scale(1.2) rotate(10deg);
     }
+
     100% {
         transform: scale(1) rotate(0deg);
         opacity: 1;
@@ -755,6 +763,7 @@ button {
         opacity: 0;
         max-height: 0;
     }
+
     to {
         opacity: 1;
         max-height: 300px;
@@ -813,7 +822,7 @@ button {
     .main-content {
         grid-template-columns: 1fr;
     }
-    
+
     .file-selection,
     .presets-section,
     .settings-section {

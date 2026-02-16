@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron')
 const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
 const fs = require('fs-extra');
+const { execSync } = require('child_process');
 
 // ============================================================================
 // CONSTANTS
@@ -10,10 +11,7 @@ const fs = require('fs-extra');
 Menu.setApplicationMenu(null);
 
 const configPath = path.join(app.getPath('userData'), 'config.json');
-
-const MIN_SEGMENT_DURATION = 0.05; // Minimum 50ms for audio frame safety
-const PROGRESS_EXTRACTION_MAX = 90; // Max progress during segment extraction
-const PROGRESS_CONCAT_START = 90; // Progress when starting concat
+const MIN_SEGMENT_DURATION = 0.05;
 const TEMP_DIR_NAME = '.klyppr_temp';
 
 const PLATFORM = {
@@ -22,22 +20,50 @@ const PLATFORM = {
 };
 
 const QUALITY_SETTINGS = {
-    fast: {
-        preset: 'ultrafast',
-        crf: 28,        // Lower quality, smaller file
-        qv: 6           // Windows mpeg4 quality (higher = lower quality)
-    },
-    medium: {
-        preset: 'veryfast',
-        crf: 23,        // Balanced quality
-        qv: 5           // Windows mpeg4 quality
-    },
-    high: {
-        preset: 'medium',
-        crf: 18,        // Higher quality, larger file
-        qv: 3           // Windows mpeg4 quality (lower = higher quality)
-    }
+    fast: { preset: 'ultrafast', crf: 28, qv: 6 },
+    medium: { preset: 'veryfast', crf: 23, qv: 5 },
+    high: { preset: 'medium', crf: 18, qv: 3 }
 };
+
+// GPU encoder quality settings (higher = better quality)
+const HW_QUALITY_SETTINGS = {
+    // VideoToolbox (macOS) — uses quality percentage (1-100)
+    videotoolbox: { fast: 35, medium: 55, high: 75 },
+    // NVENC (NVIDIA) — uses CQ value (lower = better, like CRF)
+    nvenc: { fast: 32, medium: 24, high: 18 },
+    // QSV (Intel) — uses global_quality
+    qsv: { fast: 32, medium: 24, high: 18 },
+    // AMF (AMD) — uses quality level
+    amf: { fast: 32, medium: 24, high: 18 }
+};
+
+// Detected at startup — null means software encoding
+let detectedHWEncoder = null;
+
+// ============================================================================
+// ACTIVE PROCESS TRACKING (for cancel support)
+// ============================================================================
+
+let currentFFmpegProcess = null;
+let isCancelled = false;
+
+function setActiveProcess(proc) {
+    currentFFmpegProcess = proc;
+}
+
+function clearActiveProcess() {
+    currentFFmpegProcess = null;
+}
+
+function cancelActiveProcess() {
+    isCancelled = true;
+    if (currentFFmpegProcess) {
+        try {
+            currentFFmpegProcess.kill('SIGTERM');
+        } catch (e) { /* Process may have already exited */ }
+        clearActiveProcess();
+    }
+}
 
 // ============================================================================
 // CONFIG FUNCTIONS
@@ -71,16 +97,14 @@ function getFFmpegPaths() {
     const { isDevelopment, isWindows } = PLATFORM;
     const baseDir = isDevelopment ? __dirname : process.resourcesPath;
     const extension = isWindows ? '.exe' : '';
-    
+
     if (isDevelopment) {
-        // Development: bin/win/ or bin/mac/
         const platformDir = isWindows ? 'win' : 'mac';
         return {
             ffmpeg: path.join(baseDir, 'bin', platformDir, `ffmpeg${extension}`),
             ffprobe: path.join(baseDir, 'bin', platformDir, `ffprobe${extension}`)
         };
     } else {
-        // Production: bin/ (no platform subdirectory)
         return {
             ffmpeg: path.join(baseDir, 'bin', `ffmpeg${extension}`),
             ffprobe: path.join(baseDir, 'bin', `ffprobe${extension}`)
@@ -90,15 +114,62 @@ function getFFmpegPaths() {
 
 async function setupFFmpegBinaries() {
     const { ffmpeg: ffmpegPath, ffprobe: ffprobePath } = getFFmpegPaths();
-    
+
     if (!fs.existsSync(ffmpegPath) || !fs.existsSync(ffprobePath)) {
         throw new Error('FFmpeg or FFprobe binaries not found.');
     }
-    
+
     ffmpeg.setFfmpegPath(ffmpegPath);
     ffmpeg.setFfprobePath(ffprobePath);
-    
+
+    // Detect GPU hardware encoder
+    detectedHWEncoder = detectHardwareEncoder(ffmpegPath);
+
     return { ffmpegPath, ffprobePath };
+}
+
+/**
+ * Detect available hardware video encoders at startup.
+ * Runs `ffmpeg -encoders` and checks for GPU-accelerated H.264 encoders.
+ * Returns encoder info object or null if no hardware encoder is available.
+ */
+function detectHardwareEncoder(ffmpegPath) {
+    try {
+        const output = execSync(`"${ffmpegPath}" -encoders -hide_banner 2>/dev/null`, {
+            encoding: 'utf8',
+            timeout: 5000
+        });
+
+        const { isWindows } = PLATFORM;
+
+        if (!isWindows) {
+            // macOS: try VideoToolbox
+            if (output.includes('h264_videotoolbox')) {
+                console.log('🎮 Hardware encoder detected: h264_videotoolbox (Apple GPU)');
+                return { codec: 'h264_videotoolbox', type: 'videotoolbox' };
+            }
+        } else {
+            // Windows: try NVENC → QSV → AMF (in order of preference)
+            if (output.includes('h264_nvenc')) {
+                console.log('🎮 Hardware encoder detected: h264_nvenc (NVIDIA GPU)');
+                return { codec: 'h264_nvenc', type: 'nvenc' };
+            }
+            if (output.includes('h264_qsv')) {
+                console.log('🎮 Hardware encoder detected: h264_qsv (Intel GPU)');
+                return { codec: 'h264_qsv', type: 'qsv' };
+            }
+            if (output.includes('h264_amf')) {
+                console.log('🎮 Hardware encoder detected: h264_amf (AMD GPU)');
+                return { codec: 'h264_amf', type: 'amf' };
+            }
+        }
+
+        console.log('💻 No hardware encoder found — using software encoding');
+        return null;
+    } catch (e) {
+        console.log('💻 Hardware detection failed — using software encoding');
+        return null;
+    }
 }
 
 // ============================================================================
@@ -120,7 +191,7 @@ function createWindow() {
             contextIsolation: false
         }
     });
-    
+
     mainWindow.loadFile('index.html');
     mainWindow.once('ready-to-show', () => mainWindow.show());
 }
@@ -140,15 +211,12 @@ function getVideoMetadata(inputFile) {
 
 function calculateDurationStats(silenceRanges, inputDuration) {
     const totalSilenceDuration = silenceRanges.reduce(
-        (sum, range) => sum + (range.end - range.start),
-        0
+        (sum, range) => sum + (range.end - range.start), 0
     );
-    const expectedOutputDuration = inputDuration - totalSilenceDuration;
-    
     return {
         inputDuration,
         totalSilenceDuration,
-        expectedOutputDuration
+        expectedOutputDuration: inputDuration - totalSilenceDuration
     };
 }
 
@@ -159,7 +227,7 @@ function calculateDurationStats(silenceRanges, inputDuration) {
 function calculateTalkingRanges(silenceRanges, videoDuration) {
     const talkingRanges = [];
     let prevEnd = 0;
-    
+
     for (const range of silenceRanges) {
         if (prevEnd < range.start) {
             const duration = range.start - prevEnd;
@@ -169,14 +237,14 @@ function calculateTalkingRanges(silenceRanges, videoDuration) {
         }
         prevEnd = range.end;
     }
-    
+
     if (prevEnd < videoDuration) {
         const duration = videoDuration - prevEnd;
         if (duration > MIN_SEGMENT_DURATION) {
             talkingRanges.push({ start: prevEnd, end: videoDuration });
         }
     }
-    
+
     return talkingRanges;
 }
 
@@ -184,232 +252,227 @@ function calculateTalkingRanges(silenceRanges, videoDuration) {
 // ENCODING SETTINGS
 // ============================================================================
 
-function getEncodingOptions(qualityPreset = 'medium') {
+function getEncodingOptions(qualityPreset = 'medium', useHardwareEncoder = true) {
     const { isWindows } = PLATFORM;
-    
     const quality = QUALITY_SETTINGS[qualityPreset] || QUALITY_SETTINGS.medium;
-    
-    if (isWindows) {
+    const preset = qualityPreset || 'medium';
+
+    // GPU hardware encoding (if detected AND user opted in)
+    if (detectedHWEncoder && useHardwareEncoder) {
+        const hwQuality = HW_QUALITY_SETTINGS[detectedHWEncoder.type] || {};
+        const qVal = hwQuality[preset] || hwQuality.medium;
+
+        let videoQuality;
+        switch (detectedHWEncoder.type) {
+            case 'videotoolbox':
+                // -q:v is quality percentage for VideoToolbox (higher = better)
+                videoQuality = ['-q:v', qVal.toString()];
+                break;
+            case 'nvenc':
+                // NVENC: preset + constant quality
+                videoQuality = ['-preset', preset === 'fast' ? 'p1' : preset === 'high' ? 'p7' : 'p4',
+                    '-cq', qVal.toString(), '-rc', 'vbr'];
+                break;
+            case 'qsv':
+                // QSV: global_quality
+                videoQuality = ['-global_quality', qVal.toString(), '-look_ahead', '1'];
+                break;
+            case 'amf':
+                // AMF: quality preset + qp
+                videoQuality = ['-quality', preset === 'fast' ? 'speed' : preset === 'high' ? 'quality' : 'balanced',
+                    '-qp_i', qVal.toString(), '-qp_p', qVal.toString()];
+                break;
+            default:
+                videoQuality = ['-q:v', qVal.toString()];
+        }
+
         return {
-            videoCodec: 'mpeg4',
-            videoQuality: ['-q:v', quality.qv.toString()],
-            audioCodec: 'mp3',
-            audioBitrate: '128k'
+            videoCodec: detectedHWEncoder.codec,
+            videoQuality,
+            audioCodec: isWindows ? 'mp3' : 'aac',
+            audioBitrate: '128k',
+            extraOptions: ['-threads', '0', '-movflags', '+faststart'],
+            isHardware: true
         };
     }
-    
+
+    // Software encoding fallback
     return {
         videoCodec: 'libx264',
-        videoQuality: ['-preset', quality.preset, '-crf', quality.crf.toString()],
-        audioCodec: 'aac',
+        videoQuality: qualityPreset === 'fast' ? ['-preset', 'ultrafast', '-crf', '28'] :
+            qualityPreset === 'high' ? ['-preset', 'medium', '-crf', '18'] :
+                ['-preset', 'veryfast', '-crf', '23'],
+        audioCodec: isWindows ? 'mp3' : 'aac',
         audioBitrate: '128k',
-        extraOptions: ['-movflags', '+faststart']
+        extraOptions: ['-threads', '0', '-movflags', '+faststart']
     };
 }
 
-function buildSegmentOutputOptions(qualityPreset = 'medium') {
-    const encoding = getEncodingOptions(qualityPreset);
-    const options = [
-        '-c:v', encoding.videoCodec,
-        ...encoding.videoQuality,
-        '-c:a', encoding.audioCodec,
-        '-b:a', encoding.audioBitrate,
-        '-avoid_negative_ts', 'make_zero'
-    ];
-    
-    if (encoding.extraOptions) {
-        options.push(...encoding.extraOptions);
+// ============================================================================
+// FILTER SCRIPT GENERATION (trim/atrim + concat)
+// ============================================================================
+
+function buildFilterScript(talkingRanges, normalizeAudio) {
+    const filterParts = talkingRanges.map((r, i) =>
+        `[0:v]trim=start=${r.start.toFixed(4)}:end=${r.end.toFixed(4)},setpts=PTS-STARTPTS[v${i}];` +
+        `[0:a]atrim=start=${r.start.toFixed(4)}:end=${r.end.toFixed(4)},asetpts=PTS-STARTPTS[a${i}]`
+    );
+
+    const concatInputs = talkingRanges.map((_, i) => `[v${i}][a${i}]`).join('');
+
+    let filterGraph = filterParts.join(';') + ';' + concatInputs +
+        `concat=n=${talkingRanges.length}:v=1:a=1`;
+
+    if (normalizeAudio) {
+        filterGraph += `[tmpv][tmpa];[tmpv]copy[outv];[tmpa]loudnorm=I=-16:TP=-1.5:LRA=11[outa]`;
+    } else {
+        filterGraph += `[outv][outa]`;
     }
-    
-    return options;
+
+    return filterGraph;
+}
+
+async function writeFilterScript(filterGraph, tempDir) {
+    await fs.ensureDir(tempDir);
+    const scriptPath = path.join(tempDir, 'filter_script.txt');
+    await fs.writeFile(scriptPath, filterGraph, 'utf8');
+    return scriptPath;
 }
 
 // ============================================================================
-// SEGMENT EXTRACTION
+// VIDEO PROCESSING (trim+atrim+concat via filter_complex_script)
 // ============================================================================
 
-function extractSegment(inputFile, segmentOutput, start, end, segmentIndex, totalSegments, qualityPreset, event) {
+function processVideoWithFilter(inputFile, outputFile, filterScriptPath, qualityPreset, expectedDuration, event, useHardwareEncoder = true) {
     return new Promise((resolve, reject) => {
-        const duration = end - start;
-        const outputOptions = buildSegmentOutputOptions(qualityPreset);
-        
-        ffmpeg(inputFile)
-            .seekInput(start)
-            .duration(duration)
-            .outputOptions(outputOptions)
-            .on('end', () => {
-                event.reply('log', `✓ Segment ${segmentIndex + 1}/${totalSegments}: ${start.toFixed(2)}s - ${end.toFixed(2)}s`);
-                resolve();
-            })
-            .on('error', (err) => {
-                event.reply('log', `❌ Segment ${segmentIndex + 1} error: ${err.message}`);
-                reject(err);
-            })
-            .save(segmentOutput);
-    });
-}
+        if (isCancelled) return reject(new Error('Processing cancelled'));
 
-async function extractAllSegments(inputFile, talkingRanges, tempDir, qualityPreset, event) {
-    const tempFiles = [];
-    
-    for (let i = 0; i < talkingRanges.length; i++) {
-        const { start, end } = talkingRanges[i];
-        const segmentOutput = path.join(tempDir, `segment_${i.toString().padStart(4, '0')}.mp4`);
-        tempFiles.push(segmentOutput);
-        
-        await extractSegment(inputFile, segmentOutput, start, end, i, talkingRanges.length, qualityPreset, event);
-        
-        // Calculate progress: (current segment / total segments) * max progress
-        const segmentProgress = ((i + 1) / talkingRanges.length) * 100;
-        const progress = Math.round((segmentProgress / 100) * PROGRESS_EXTRACTION_MAX);
-        
-        event.reply('progress', {
-            status: `Extracting segment ${i + 1}/${talkingRanges.length} (${Math.round(segmentProgress)}%)...`,
-            percent: progress
-        });
-    }
-    
-    return tempFiles;
-}
+        const encoding = getEncodingOptions(qualityPreset, useHardwareEncoder);
+        const outputOptions = [
+            '-filter_complex_script', filterScriptPath,
+            '-map', '[outv]',
+            '-map', '[outa]',
+            '-c:v', encoding.videoCodec,
+            ...encoding.videoQuality,
+            '-c:a', encoding.audioCodec,
+            '-b:a', encoding.audioBitrate,
+            '-avoid_negative_ts', 'make_zero',
+            '-threads', '0'
+        ];
+        if (encoding.extraOptions) outputOptions.push(...encoding.extraOptions);
 
-// ============================================================================
-// CONCATENATION
-// ============================================================================
-
-function createConcatFile(tempFiles, tempDir) {
-    const concatFile = path.join(tempDir, 'concat_list.txt');
-    const concatContent = tempFiles.map(file => {
-        const normalizedPath = path.resolve(file).replace(/\\/g, '/').replace(/'/g, "\\'");
-        return `file '${normalizedPath}'`;
-    }).join('\n');
-    
-    return { concatFile, concatContent };
-}
-
-function concatSegments(concatFile, outputFile, totalSegments, normalizeAudio, qualityPreset, event) {
-    return new Promise((resolve, reject) => {
-        const encoding = getEncodingOptions(qualityPreset);
-        
-        const ffmpegCmd = ffmpeg()
-            .input(concatFile)
-            .inputOptions(['-f', 'concat', '-safe', '0']);
-        
-        if (normalizeAudio) {
-            // Re-encode with audio normalization
-            event.reply('log', `🔊 Normalizing audio to -16 LUFS (YouTube standard)...`);
-            ffmpegCmd
-                .outputOptions([
-                    '-c:v', encoding.videoCodec,
-                    ...encoding.videoQuality,
-                    '-c:a', encoding.audioCodec,
-                    '-b:a', encoding.audioBitrate,
-                    '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
-                    '-avoid_negative_ts', 'make_zero',
-                    '-fflags', '+genpts'
-                ]);
-            
-            if (encoding.extraOptions) {
-                ffmpegCmd.outputOptions(encoding.extraOptions);
-            }
+        if (encoding.isHardware) {
+            event.reply('log', `🎮 Using hardware encoder: ${encoding.videoCodec}`);
         } else {
-            // Fast copy (no re-encoding)
-            ffmpegCmd.outputOptions([
-                '-c', 'copy',
-                '-avoid_negative_ts', 'make_zero',
-                '-fflags', '+genpts'
-            ]);
+            event.reply('log', `💻 Using software encoder: ${encoding.videoCodec}`);
         }
-        
-        ffmpegCmd
-            .on('start', () => {
-                event.reply('log', `⚙️ Merging ${totalSegments} segments...`);
-                // Set initial progress
-                event.reply('progress', {
-                    status: normalizeAudio ? 'Merging & normalizing...' : 'Merging segments...',
-                    percent: PROGRESS_CONCAT_START
-                });
+
+        const startTime = Date.now();
+
+        const cmd = ffmpeg(inputFile)
+            .outputOptions(outputOptions)
+            .on('start', (command) => {
+                event.reply('log', `⚙️ FFmpeg: ${command}`);
             })
             .on('progress', (progress) => {
-                // FFmpeg progress.percent might be undefined for concat operations
-                // Only update if we have valid, reasonable progress data
-                if (progress && typeof progress.percent === 'number' && !isNaN(progress.percent)) {
-                    const percentValue = parseFloat(progress.percent);
-                    if (percentValue >= 0 && percentValue <= 100) {
-                        const concatProgress = PROGRESS_CONCAT_START + (percentValue / 10);
-                        const finalPercent = Math.min(100, Math.max(PROGRESS_CONCAT_START, concatProgress));
-                        
-                        event.reply('progress', {
-                            status: normalizeAudio ? `Merging & normalizing: ${percentValue.toFixed(1)}%` : `Merging: ${percentValue.toFixed(1)}%`,
-                            percent: finalPercent
-                        });
+                if (isCancelled) return;
+
+                let percent = 0;
+                if (progress && progress.timemark) {
+                    const parts = progress.timemark.split(':');
+                    if (parts.length === 3) {
+                        const currentTime = parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
+                        percent = Math.min(99, Math.round((currentTime / expectedDuration) * 100));
                     }
                 }
+
+                const elapsed = (Date.now() - startTime) / 1000;
+                let eta = '';
+                if (percent > 5 && elapsed > 2) {
+                    const remaining = Math.max(0, (elapsed / (percent / 100)) - elapsed);
+                    eta = remaining < 60
+                        ? ` — ~${Math.round(remaining)}s remaining`
+                        : ` — ~${Math.round(remaining / 60)}m ${Math.round(remaining % 60)}s remaining`;
+                }
+
+                event.reply('progress', { status: `Processing: ${percent}%${eta}`, percent });
             })
             .on('end', () => {
-                event.reply('log', normalizeAudio ? `✅ Segments merged and audio normalized` : `✅ Segments merged successfully`);
+                if (isCancelled) return reject(new Error('Processing cancelled'));
+                clearActiveProcess();
+                event.reply('progress', { status: 'Processing: 100% — Complete!', percent: 100 });
                 resolve();
             })
             .on('error', (err) => {
-                event.reply('log', `❌ Concat error: ${err.message}`);
-                reject(err);
+                clearActiveProcess();
+                if (isCancelled) reject(new Error('Processing cancelled'));
+                else reject(err);
             })
             .save(outputFile);
+
+        setActiveProcess(cmd);
     });
 }
 
 // ============================================================================
-// AUDIO NORMALIZATION
+// AUDIO NORMALIZATION (only — when no silence found)
 // ============================================================================
 
 function normalizeAudioOnly(inputFile, outputFile, qualityPreset, event) {
     return new Promise((resolve, reject) => {
+        if (isCancelled) return reject(new Error('Processing cancelled'));
+
         const encoding = getEncodingOptions(qualityPreset);
-        
-        ffmpeg(inputFile)
+        const startTime = Date.now();
+
+        const cmd = ffmpeg(inputFile)
             .outputOptions([
                 '-c:v', 'copy',
                 '-c:a', encoding.audioCodec,
                 '-b:a', encoding.audioBitrate,
-                '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11'
+                '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
+                '-threads', '0'
             ])
             .on('start', () => {
                 event.reply('log', `⚙️ Normalizing audio...`);
-                // Set initial progress
-                event.reply('progress', {
-                    status: 'Normalizing audio...',
-                    percent: 50
-                });
+                event.reply('progress', { status: 'Normalizing audio...', percent: 50 });
             })
             .on('progress', (progress) => {
-                // FFmpeg progress.percent might be undefined or invalid
-                // Only update if we have valid, reasonable progress data
+                if (isCancelled) return;
                 if (progress && typeof progress.percent === 'number' && !isNaN(progress.percent)) {
-                    const percentValue = parseFloat(progress.percent);
-                    if (percentValue >= 0 && percentValue <= 100) {
-                        const normalizeProgress = 50 + (percentValue / 2);
-                        const finalPercent = Math.min(100, Math.max(50, normalizeProgress));
-                        
-                        event.reply('progress', {
-                            status: `Normalizing: ${percentValue.toFixed(1)}%`,
-                            percent: finalPercent
-                        });
+                    const pv = parseFloat(progress.percent);
+                    if (pv >= 0 && pv <= 100) {
+                        const finalPercent = Math.min(100, 50 + (pv / 2));
+                        const elapsed = (Date.now() - startTime) / 1000;
+                        let eta = '';
+                        if (pv > 10 && elapsed > 2) {
+                            const remaining = Math.max(0, (elapsed / (pv / 100)) - elapsed);
+                            eta = remaining < 60
+                                ? ` — ~${Math.round(remaining)}s remaining`
+                                : ` — ~${Math.round(remaining / 60)}m ${Math.round(remaining % 60)}s remaining`;
+                        }
+                        event.reply('progress', { status: `Normalizing: ${pv.toFixed(1)}%${eta}`, percent: finalPercent });
                     }
                 }
             })
             .on('end', () => {
+                clearActiveProcess();
                 event.reply('log', `✅ Audio normalized successfully`);
                 resolve();
             })
             .on('error', (err) => {
-                event.reply('log', `❌ Normalization error: ${err.message}`);
-                reject(err);
+                clearActiveProcess();
+                if (isCancelled) reject(new Error('Processing cancelled'));
+                else reject(err);
             })
             .save(outputFile);
+
+        setActiveProcess(cmd);
     });
 }
 
 // ============================================================================
-// SILENCE DETECTION
+// SILENCE DETECTION (optimized with -vn: audio-only analysis)
 // ============================================================================
 
 function parseSilenceLine(line) {
@@ -424,23 +487,24 @@ function parseSilenceLine(line) {
 function processSilenceRange(startTime, endTime, paddingDuration) {
     const adjustedStart = startTime + paddingDuration;
     const adjustedEnd = endTime - paddingDuration;
-    const duration = adjustedEnd - adjustedStart;
-    
     return {
         adjustedStart,
         adjustedEnd,
-        duration
+        duration: adjustedEnd - adjustedStart
     };
 }
 
 async function detectSilence(inputFile, params, event) {
     return new Promise((resolve, reject) => {
+        if (isCancelled) return reject(new Error('Processing cancelled'));
+
         const silenceRanges = [];
         let startTime = null;
-        
-        event.reply('log', `🔍 Starting silence analysis...`);
-        
-        ffmpeg(inputFile)
+
+        event.reply('log', `🔍 Starting silence analysis (audio-only mode)...`);
+
+        const cmd = ffmpeg(inputFile)
+            .inputOptions(['-vn'])
             .outputOptions(['-f', 'null'])
             .audioFilters(`silencedetect=noise=${params.silenceDb}dB:d=${params.minSilenceDuration}`)
             .output('-')
@@ -449,18 +513,18 @@ async function detectSilence(inputFile, params, event) {
             })
             .on('stderr', line => {
                 const { start, end } = parseSilenceLine(line);
-                
+
                 if (start !== null) {
                     startTime = start;
                     event.reply('log', `🔇 Start: ${startTime}s`);
                 }
-                
+
                 if (end !== null && startTime !== null) {
                     const paddingDur = parseFloat(params.paddingDuration);
                     const { adjustedStart, adjustedEnd, duration } = processSilenceRange(startTime, end, paddingDur);
-                    
+
                     event.reply('log', `🔊 End: ${end}s | Padding: ${paddingDur}s | Duration: ${duration.toFixed(3)}s`);
-                    
+
                     if (duration > MIN_SEGMENT_DURATION) {
                         silenceRanges.push({ start: adjustedStart, end: adjustedEnd });
                         event.reply('log', `✓ Range: ${adjustedStart.toFixed(3)}s - ${adjustedEnd.toFixed(3)}s`);
@@ -471,52 +535,56 @@ async function detectSilence(inputFile, params, event) {
                 }
             })
             .on('end', () => {
+                if (isCancelled) return reject(new Error('Processing cancelled'));
+                clearActiveProcess();
                 event.reply('log', `✅ Found ${silenceRanges.length} silence ranges`);
                 resolve(silenceRanges);
             })
-            .on('error', reject)
+            .on('error', (err) => {
+                clearActiveProcess();
+                if (isCancelled) reject(new Error('Processing cancelled'));
+                else reject(err);
+            })
             .run();
+
+        setActiveProcess(cmd);
     });
 }
 
 // ============================================================================
-// VIDEO PROCESSING
+// VIDEO PROCESSING — ORCHESTRATOR
 // ============================================================================
 
-async function processVideo(inputFile, outputFile, silenceRanges, normalizeAudio, qualityPreset, event) {
+async function processVideo(inputFile, outputFile, silenceRanges, normalizeAudio, qualityPreset, event, useHardwareEncoder = true) {
+    const metadata = await getVideoMetadata(inputFile);
+    const inputDuration = metadata.format.duration;
+
+    const talkingRanges = calculateTalkingRanges(silenceRanges, inputDuration);
+    const stats = calculateDurationStats(silenceRanges, inputDuration);
+
+    event.reply('log', `📊 Input: ${stats.inputDuration.toFixed(1)}s | Removing: ${stats.totalSilenceDuration.toFixed(1)}s | Expected: ${stats.expectedOutputDuration.toFixed(1)}s`);
+    event.reply('log', `📦 Found ${talkingRanges.length} talking ranges`);
+    event.reply('log', `🎨 Quality: ${qualityPreset}`);
+    if (normalizeAudio) event.reply('log', `🔊 Audio normalization enabled (-16 LUFS)`);
+
+    const tempDir = path.join(path.dirname(outputFile), TEMP_DIR_NAME);
+
     try {
-        const metadata = await getVideoMetadata(inputFile);
-        const inputDuration = metadata.format.duration;
-        
-        const talkingRanges = calculateTalkingRanges(silenceRanges, inputDuration);
-        const stats = calculateDurationStats(silenceRanges, inputDuration);
-        
-        event.reply('log', `📊 Input: ${stats.inputDuration.toFixed(1)}s | Removing: ${stats.totalSilenceDuration.toFixed(1)}s | Expected: ${stats.expectedOutputDuration.toFixed(1)}s`);
-        event.reply('log', `📦 Found ${talkingRanges.length} talking ranges - processing segments...`);
-        event.reply('log', `🎨 Quality: ${qualityPreset} (${qualityPreset === 'fast' ? 'Faster, Lower Quality' : qualityPreset === 'high' ? 'Slower, Best Quality' : 'Balanced'})`);
-        
-        const tempDir = path.join(path.dirname(outputFile), TEMP_DIR_NAME);
-        await fs.ensureDir(tempDir);
-        
-        const tempFiles = await extractAllSegments(inputFile, talkingRanges, tempDir, qualityPreset, event);
-        
-        event.reply('log', `🔗 Concatenating ${talkingRanges.length} segments...`);
-        const { concatFile, concatContent } = createConcatFile(tempFiles, tempDir);
-        await fs.writeFile(concatFile, concatContent, 'utf8');
-        
-        await concatSegments(concatFile, outputFile, talkingRanges.length, normalizeAudio, qualityPreset, event);
-        
-        event.reply('log', `🧹 Cleaning up temporary files...`);
-        await fs.remove(tempDir);
-        
+        const filterGraph = buildFilterScript(talkingRanges, normalizeAudio);
+        const filterScriptPath = await writeFilterScript(filterGraph, tempDir);
+
+        event.reply('log', `🚀 Processing with filter_complex_script (${talkingRanges.length} segments)`);
+
+        await processVideoWithFilter(inputFile, outputFile, filterScriptPath, qualityPreset, stats.expectedOutputDuration, event, useHardwareEncoder);
+
         event.reply('log', `✅ Video processing completed successfully`);
-        event.reply('progress', {
-            status: 'Processing: 100% - Complete!',
-            percent: 100
-        });
-    } catch (error) {
-        event.reply('log', `❌ Error: ${error.message || error?.toString() || 'Unknown error'}`);
-        throw error;
+    } finally {
+        try {
+            await fs.remove(tempDir);
+            event.reply('log', `🧹 Cleaned up temporary files`);
+        } catch (e) {
+            event.reply('log', `⚠️ Could not clean temp files: ${e.message}`);
+        }
     }
 }
 
@@ -529,7 +597,7 @@ ipcMain.on('select-input', async (event) => {
         properties: ['openFile'],
         filters: [{ name: 'Video Files', extensions: ['mp4', 'avi', 'mov', 'mkv'] }]
     });
-    
+
     if (!result.canceled && result.filePaths.length > 0) {
         event.reply('input-selected', result.filePaths[0]);
     }
@@ -539,11 +607,11 @@ ipcMain.on('select-output', async (event) => {
     const result = await dialog.showOpenDialog(mainWindow, {
         properties: ['openDirectory']
     });
-    
+
     if (!result.canceled && result.filePaths.length > 0) {
         const outputPath = result.filePaths[0];
         event.reply('output-selected', outputPath);
-        
+
         const config = loadConfig();
         config.lastOutputPath = outputPath;
         saveConfig(config);
@@ -557,52 +625,84 @@ ipcMain.on('load-last-output', (event) => {
     }
 });
 
+ipcMain.on('cancel-processing', (event) => {
+    event.reply('log', `⚠️ Cancelling processing...`);
+    cancelActiveProcess();
+});
+
+ipcMain.on('get-encoder-info', (event) => {
+    if (detectedHWEncoder) {
+        const descriptions = {
+            videotoolbox: 'Apple VideoToolbox — hardware encode via macOS GPU',
+            nvenc: 'NVIDIA NVENC — hardware encode via NVIDIA GPU',
+            qsv: 'Intel Quick Sync — hardware encode via Intel GPU',
+            amf: 'AMD AMF — hardware encode via AMD GPU'
+        };
+        event.reply('encoder-info', {
+            available: true,
+            name: detectedHWEncoder.codec,
+            type: detectedHWEncoder.type,
+            description: descriptions[detectedHWEncoder.type] || 'Hardware GPU encoder'
+        });
+    } else {
+        event.reply('encoder-info', { available: false });
+    }
+});
+
 ipcMain.on('start-processing', async (event, params) => {
+    isCancelled = false;
+    clearActiveProcess();
+
     try {
         const outputFile = path.join(
             params.outputPath,
             `processed_${path.basename(params.inputPath)}`
         );
-        
-        event.reply('progress', {
-            status: 'Phase 1: Analyzing audio for silence...',
-            percent: 0
-        });
-        
+
+        event.reply('progress', { status: 'Phase 1: Analyzing audio for silence...', percent: 0 });
+
         const silenceRanges = await detectSilence(params.inputPath, params, event);
-        
+
+        if (isCancelled) {
+            event.reply('completed', { success: false, cancelled: true, outputFile: null });
+            return;
+        }
+
         if (silenceRanges.length === 0) {
             event.reply('log', `ℹ️ No silence found, processing file...`);
-            event.reply('progress', {
-                status: 'No silences detected - processing file...',
-                percent: 50
-            });
-            
+            event.reply('progress', { status: 'No silences detected — processing file...', percent: 50 });
+
             if (params.normalizeAudio) {
                 event.reply('log', `🔊 Normalizing audio to -16 LUFS (YouTube standard)...`);
                 await normalizeAudioOnly(params.inputPath, outputFile, params.qualityPreset || 'medium', event);
             } else {
                 await fs.copyFile(params.inputPath, outputFile);
             }
-            
-            event.reply('progress', {
-                status: 'Complete! No processing needed.',
-                percent: 100
-            });
-            event.reply('completed', { success: true, outputFile: outputFile });
+
+            event.reply('progress', { status: 'Complete! No processing needed.', percent: 100 });
+            event.reply('completed', { success: true, outputFile });
             return;
         }
-        
-        event.reply('progress', {
-            status: 'Phase 2: Processing video (removing silences)...',
-            percent: 0
-        });
-        
-        await processVideo(params.inputPath, outputFile, silenceRanges, params.normalizeAudio, params.qualityPreset || 'medium', event);
-        event.reply('completed', { success: true, outputFile: outputFile });
+
+        event.reply('progress', { status: 'Phase 2: Processing video (removing silences)...', percent: 0 });
+
+        await processVideo(params.inputPath, outputFile, silenceRanges, params.normalizeAudio, params.qualityPreset || 'medium', event, params.useHardwareEncoder !== false);
+
+        if (isCancelled) {
+            try { await fs.remove(outputFile); } catch (e) { /* ignore */ }
+            event.reply('completed', { success: false, cancelled: true, outputFile: null });
+        } else {
+            event.reply('completed', { success: true, outputFile });
+        }
     } catch (error) {
-        event.reply('log', `❌ Error: ${error.message}`);
-        event.reply('completed', { success: false, outputFile: null });
+        if (isCancelled || (error.message && error.message.includes('cancelled'))) {
+            event.reply('log', `⚠️ Processing cancelled by user`);
+            event.reply('completed', { success: false, cancelled: true, outputFile: null });
+        } else {
+            const errorMessage = error.message || 'Unknown error';
+            event.reply('log', `❌ Error: ${errorMessage}`);
+            event.reply('completed', { success: false, cancelled: false, error: errorMessage, outputFile: null });
+        }
     }
 });
 

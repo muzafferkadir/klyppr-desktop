@@ -77,9 +77,8 @@
     "fs-extra": "^11.3.0"
   },
   "devDependencies": {
-    "@electron/remote": "^2.1.2",
     "cross-env": "^7.0.3",
-    "electron": "^29.1.4",
-    "electron-builder": "^24.13.3"
+    "electron": "^40.4.1",
+    "electron-builder": "^26.7.0"
   }
 }
