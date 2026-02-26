@@ -20,8 +20,8 @@ This is the desktop version of [Klyppr](https://github.com/muzafferkadir/klyppr)
 
 1. Download the latest release for your operating system
 
-[Windows (x64)](https://github.com/muzafferkadir/klyppr-desktop/releases/download/v1.2.0/Klyppr.Setup.1.2.0.x64.exe)
-[MacOS (arm64)](https://github.com/muzafferkadir/klyppr-desktop/releases/download/v1.2.0/Klyppr-1.2.0-arm64.dmg)
+[Windows (x64)](https://github.com/muzafferkadir/klyppr-desktop/releases/download/v1.3.0/Klyppr-1.3.0-x32.exe)
+[MacOS (arm64)](https://github.com/muzafferkadir/klyppr-desktop/releases/download/v1.3.0/Klyppr-1.3.0-arm64.dmg)
 
 
 ## macOS Instructions (App Not Signed)
