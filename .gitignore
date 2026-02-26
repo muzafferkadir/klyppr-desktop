@@ -1,6 +1,7 @@
 node_modules
 videos
 package-lock.json
+.DS_Store
 dist
 .klyppr_temp
 .concat_list.txt
