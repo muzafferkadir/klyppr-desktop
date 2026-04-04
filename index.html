@@ -33,10 +33,10 @@
                             </svg>
                             Input Video
                         </label>
-                        <div class="input-group">
-                            <input type="text" id="inputPath" readonly placeholder="Select video file..."
+                        <div class="input-group" id="inputDropZone">
+                            <input type="text" id="inputPath" readonly placeholder="Select or drop video file..."
                                 class="file-input" data-tooltip="Select your input video file">
-                            <button class="browse-btn" onclick="selectInput()" data-tooltip="Browse for video">
+                            <button class="browse-btn" data-tooltip="Browse for video">
                                 <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2">
                                     <path
@@ -58,7 +58,7 @@
                         <div class="input-group">
                             <input type="text" id="outputPath" readonly placeholder="Select output folder..."
                                 class="file-input" data-tooltip="Select output folder">
-                            <button class="browse-btn" onclick="selectOutput()" data-tooltip="Browse for folder">
+                            <button class="browse-btn" data-tooltip="Browse for folder">
                                 <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2">
                                     <path
@@ -71,7 +71,7 @@
                 </section>
 
                 <section class="action-section">
-                    <button id="startBtn" onclick="startProcessing()" disabled class="start-btn"
+                    <button id="startBtn" disabled class="start-btn"
                         data-tooltip="Select input and output first">
                         <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polygon points="5 3 19 12 5 21 5 3" />
@@ -187,6 +187,7 @@
                                     <option value="fast">Fast (Lower Quality, Faster)</option>
                                     <option value="medium" selected>Medium (Balanced)</option>
                                     <option value="high">High (Best Quality, Slower)</option>
+                                    <option value="lossless">Lossless (No Quality Loss, Largest File)</option>
                                 </select>
                             </div>
                         </div>
@@ -235,11 +236,11 @@
 
                 <section class="log-section" id="logSection" style="display: none;">
                     <div class="log-header">
-                        <button class="log-toggle" onclick="toggleLogs()" id="logToggleBtn">
+                        <button class="log-toggle" id="logToggleBtn">
                             <span class="log-toggle-text">Show Processing Logs</span>
                             <span class="log-toggle-icon">▼</span>
                         </button>
-                        <button class="log-copy-btn" onclick="copyLogs()" id="logCopyBtn" title="Copy all logs">
+                        <button class="log-copy-btn" id="logCopyBtn" title="Copy all logs">
                             <svg class="log-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 stroke-width="2">
                                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
@@ -256,235 +257,13 @@
         </div>
     </div>
 
-    <script>
-        const { ipcRenderer } = require('electron');
-
-        // Preset değerleri
-        const presets = {
-            recommended: {
-                silenceDb: -35,
-                minSilenceDuration: 0.5,
-                paddingDuration: 0.05
-            },
-            fast: {
-                silenceDb: -30,
-                minSilenceDuration: 0.4,
-                paddingDuration: 0.035
-            }
-        };
-
-        // Preset butonları için olay dinleyicileri
-        document.querySelectorAll('.preset-btn').forEach(button => {
-            button.addEventListener('click', () => {
-                // Aktif butonu değiştir
-                document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('active'));
-                button.classList.add('active');
-
-                const preset = button.dataset.preset;
-                const values = presets[preset];
-                document.getElementById('silenceDb').value = values.silenceDb;
-                document.getElementById('minSilenceDuration').value = values.minSilenceDuration;
-                document.getElementById('paddingDuration').value = values.paddingDuration;
-            });
-        });
-
-        function selectInput() {
-            ipcRenderer.send('select-input');
-        }
-
-        function selectOutput() {
-            ipcRenderer.send('select-output');
-        }
-
-        function startProcessing() {
-            console.log('Start Processing clicked!');
-
-            const params = {
-                inputPath: document.getElementById('inputPath').value,
-                outputPath: document.getElementById('outputPath').value,
-                silenceDb: document.getElementById('silenceDb').value,
-                minSilenceDuration: document.getElementById('minSilenceDuration').value,
-                paddingDuration: document.getElementById('paddingDuration').value,
-                normalizeAudio: document.getElementById('normalizeAudio').checked,
-                qualityPreset: document.getElementById('qualityPreset').value,
-                useHardwareEncoder: document.getElementById('useHardwareEncoder').checked
-            };
-
-            console.log('Processing params:', params);
-
-            document.getElementById('startBtn').disabled = true;
-            document.getElementById('progress').style.display = 'block';
-            document.getElementById('logSection').style.display = 'block';
-            document.getElementById('status').textContent = 'Starting process...';
-
-            // Progress bar'ı sıfırla
-            document.getElementById('progressBar').style.width = '0%';
-
-            // Log'u temizle ve kapat
-            document.getElementById('log').innerHTML = '';
-            document.getElementById('logContainer').style.display = 'none';
-            document.getElementById('logToggleBtn').querySelector('.log-toggle-icon').textContent = '▼';
-            document.getElementById('logToggleBtn').querySelector('.log-toggle-text').textContent = 'Show Processing Logs';
-
-            console.log('Sending IPC message...');
-            ipcRenderer.send('start-processing', params);
-        }
-
-        ipcRenderer.on('input-selected', (event, path) => {
-            document.getElementById('inputPath').value = path;
-            updateStartButton();
-        });
-
-        ipcRenderer.on('output-selected', (event, path) => {
-            document.getElementById('outputPath').value = path;
-            updateStartButton();
-        });
-
-        ipcRenderer.on('progress', (event, data) => {
-            document.getElementById('status').textContent = data.status;
-            document.getElementById('progressBar').style.width = `${data.percent}%`;
-        });
-
-        ipcRenderer.on('log', (event, message) => {
-            const log = document.getElementById('log');
-            log.innerHTML += message + '<br>';
-            log.scrollTop = log.scrollHeight;
-        });
-
-        let currentOutputFile = null;
-
-        ipcRenderer.on('completed', (event, result) => {
-            document.getElementById('startBtn').disabled = false;
-            document.getElementById('status').textContent = result.success ? 'Process completed!' : 'Error occurred!';
-            if (result.success) {
-                currentOutputFile = result.outputFile;
-
-                // İşlem tamamlandığında progress bar'ı %100'e tamamla
-                document.getElementById('progressBar').style.width = '100%';
-
-                // Modal göster
-                showCompletionModal();
-
-                // 1 saniye sonra progress'i gizle
-                setTimeout(() => {
-                    document.getElementById('progress').style.display = 'none';
-                    document.getElementById('progressBar').style.width = '0%';
-                }, 1000);
-            }
-        });
-
-        function showInFolder() {
-            if (currentOutputFile) {
-                ipcRenderer.send('show-in-folder', currentOutputFile);
-            }
-        }
-
-        function updateStartButton() {
-            const inputPath = document.getElementById('inputPath').value;
-            const outputPath = document.getElementById('outputPath').value;
-            const startBtn = document.getElementById('startBtn');
-            startBtn.disabled = !(inputPath && outputPath);
-
-            // Update tooltip
-            if (inputPath && outputPath) {
-                startBtn.setAttribute('data-tooltip', 'Start processing video');
-            } else {
-                startBtn.setAttribute('data-tooltip', 'Select input and output first');
-            }
-        }
-
-        // Logs toggle
-        function toggleLogs() {
-            const logContainer = document.getElementById('logContainer');
-            const toggleBtn = document.getElementById('logToggleBtn');
-            const toggleIcon = toggleBtn.querySelector('.log-toggle-icon');
-
-            if (logContainer.style.display === 'none') {
-                logContainer.style.display = 'block';
-                toggleIcon.textContent = '▲';
-                toggleBtn.querySelector('.log-toggle-text').textContent = 'Hide Processing Logs';
-            } else {
-                logContainer.style.display = 'none';
-                toggleIcon.textContent = '▼';
-                toggleBtn.querySelector('.log-toggle-text').textContent = 'Show Processing Logs';
-            }
-        }
-
-        // Copy logs function
-        function copyLogs() {
-            const logElement = document.getElementById('log');
-            const logText = logElement.innerText || logElement.textContent;
-
-            if (!logText.trim()) {
-                return;
-            }
-
-            navigator.clipboard.writeText(logText).then(() => {
-                const copyBtn = document.getElementById('logCopyBtn');
-                const copyText = copyBtn.querySelector('.log-copy-text');
-                const originalText = copyText.textContent;
-
-                copyText.textContent = 'Copied!';
-                copyBtn.classList.add('copied');
-
-                setTimeout(() => {
-                    copyText.textContent = originalText;
-                    copyBtn.classList.remove('copied');
-                }, 2000);
-            }).catch(err => {
-                console.error('Failed to copy logs:', err);
-            });
-        }
-
-        // Modal functions
-        function showCompletionModal() {
-            const modal = document.getElementById('completionModal');
-            modal.style.display = 'flex';
-        }
-
-        function closeModal() {
-            const modal = document.getElementById('completionModal');
-            modal.style.display = 'none';
-        }
-
-        function openFolderFromModal() {
-            if (currentOutputFile) {
-                ipcRenderer.send('show-in-folder', currentOutputFile);
-            }
-            closeModal();
-        }
-
-        // Sayfa yüklendiğinde son output path'i yükle ve encoder bilgisini al
-        window.addEventListener('DOMContentLoaded', () => {
-            ipcRenderer.send('load-last-output');
-            ipcRenderer.send('get-encoder-info');
-        });
-
-        // GPU encoder bilgisi geldiğinde UI'ı güncelle
-        ipcRenderer.on('encoder-info', (event, info) => {
-            const label = document.getElementById('gpuEncoderLabel');
-            const title = document.getElementById('gpuEncoderTitle');
-            const desc = document.getElementById('gpuEncoderDesc');
-            const checkbox = document.getElementById('useHardwareEncoder');
-
-            if (info && info.available) {
-                label.style.display = '';
-                title.textContent = `GPU Acceleration (${info.name})`;
-                desc.textContent = info.description;
-                checkbox.checked = true;
-            } else {
-                // No GPU available — hide the option
-                label.style.display = 'none';
-                checkbox.checked = false;
-            }
-        });
-    </script>
+    <script src="renderer.js"></script>
 
     <!-- Completion Modal -->
     <div id="completionModal" class="modal">
-        <div class="modal-backdrop" onclick="closeModal()"></div>
+        <div class="modal-backdrop"></div>
         <div class="modal-content">
-            <button class="modal-close" onclick="closeModal()">
+            <button class="modal-close">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18" />
                     <line x1="6" y1="6" x2="18" y2="18" />
@@ -499,14 +278,14 @@
             <h2 class="modal-title">Processing Complete</h2>
             <p class="modal-text">Your video has been successfully processed and is ready to use.</p>
             <div class="modal-buttons">
-                <button class="modal-btn modal-btn-primary" onclick="openFolderFromModal()">
+                <button class="modal-btn modal-btn-primary">
                     <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                         <path d="M12 11v6M9 14l3 3 3-3" />
                     </svg>
                     Show in Folder
                 </button>
-                <button class="modal-btn modal-btn-secondary" onclick="closeModal()">
+                <button class="modal-btn modal-btn-secondary">
                     <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="6" x2="6" y2="18" />
                         <line x1="6" y1="6" x2="18" y2="18" />

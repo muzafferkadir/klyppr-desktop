@@ -214,6 +214,17 @@ body {
     gap: var(--spacing-sm);
 }
 
+.input-group.drag-over {
+    outline: 2px dashed var(--accent);
+    outline-offset: -2px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: var(--border-radius-sm);
+}
+
+.input-group.drag-over * {
+    pointer-events: none;
+}
+
 .file-input,
 .number-input,
 .select-input {

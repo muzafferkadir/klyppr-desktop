@@ -19,10 +19,16 @@ const PLATFORM = {
     isDevelopment: process.env.NODE_ENV === 'development'
 };
 
+const VIDEO_EXTENSIONS = [
+    'mp4', 'avi', 'mov', 'mkv', 'webm', 'flv', 'ts',
+    'm4v', 'wmv', '3gp', 'mpg', 'mpeg', 'mts', 'vob'
+];
+
 const QUALITY_SETTINGS = {
     fast: { preset: 'ultrafast', crf: 28, qv: 6 },
     medium: { preset: 'veryfast', crf: 23, qv: 5 },
-    high: { preset: 'medium', crf: 18, qv: 3 }
+    high: { preset: 'medium', crf: 18, qv: 3 },
+    lossless: { preset: 'slow', crf: 0, qv: 1 }
 };
 
 // GPU encoder quality settings (higher = better quality)
@@ -187,8 +193,9 @@ function createWindow() {
         show: false,
         titleBarStyle: 'default',
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, 'preload.js')
         }
     });
 
@@ -256,6 +263,17 @@ function getEncodingOptions(qualityPreset = 'medium', useHardwareEncoder = true)
     const { isWindows } = PLATFORM;
     const quality = QUALITY_SETTINGS[qualityPreset] || QUALITY_SETTINGS.medium;
     const preset = qualityPreset || 'medium';
+
+    // Lossless mode always uses software encoder (hardware encoders don't support true lossless)
+    if (qualityPreset === 'lossless') {
+        return {
+            videoCodec: 'libx264',
+            videoQuality: ['-preset', 'slow', '-crf', '0'],
+            audioCodec: isWindows ? 'mp3' : 'aac',
+            audioBitrate: '320k',
+            extraOptions: ['-threads', '0', '-movflags', '+faststart']
+        };
+    }
 
     // GPU hardware encoding (if detected AND user opted in)
     if (detectedHWEncoder && useHardwareEncoder) {
@@ -595,7 +613,7 @@ async function processVideo(inputFile, outputFile, silenceRanges, normalizeAudio
 ipcMain.on('select-input', async (event) => {
     const result = await dialog.showOpenDialog(mainWindow, {
         properties: ['openFile'],
-        filters: [{ name: 'Video Files', extensions: ['mp4', 'avi', 'mov', 'mkv'] }]
+        filters: [{ name: 'Video Files', extensions: VIDEO_EXTENSIONS }]
     });
 
     if (!result.canceled && result.filePaths.length > 0) {
@@ -708,6 +726,17 @@ ipcMain.on('start-processing', async (event, params) => {
 
 ipcMain.on('show-in-folder', (event, filePath) => {
     shell.showItemInFolder(filePath);
+});
+
+ipcMain.on('save-settings', (event, settings) => {
+    const config = loadConfig();
+    config.settings = settings;
+    saveConfig(config);
+});
+
+ipcMain.handle('load-settings', () => {
+    const config = loadConfig();
+    return config.settings || null;
 });
 
 // ============================================================================
