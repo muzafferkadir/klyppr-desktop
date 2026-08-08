@@ -1,6 +1,6 @@
 {
   "name": "klyppr-desktop",
-  "version": "1.4.0",
+  "version": "2.0.0",
   "description": "Desktop version of Klyppr video editor",
   "main": "main.js",
   "scripts": {
@@ -60,7 +60,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "perMachine": true
+      "perMachine": true,
+      "artifactName": "Klyppr-Setup-${arch}.${ext}"
+    },
+    "dmg": {
+      "artifactName": "Klyppr-mac-${arch}.${ext}"
     },
     "portable": {
       "artifactName": "Klyppr-Portable-${arch}.exe"
