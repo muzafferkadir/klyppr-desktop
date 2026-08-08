@@ -1,6 +1,6 @@
 # Klyppr Desktop
 
-> **📋 Latest (v1.4.0):** Native macOS UI (vibrancy + native window), a new brand logo, spawn-based FFmpeg pipeline with two-pass loudness normalization, and a bundled static FFmpeg so it runs anywhere.
+> **📋 Latest (v2.0.0):** Windows build, native macOS UI, a new brand logo, format-preserving output (keeps your source codec / pixel format / audio), GPU acceleration for every quality preset, and a bundled static FFmpeg so it runs anywhere.
 
 This is the desktop version of [Klyppr](https://github.com/muzafferkadir/klyppr), a tool for editing video silence.
 
@@ -69,14 +69,16 @@ yarn build:win32    # Windows 32-bit
 
 Output goes to the `dist` directory.
 
-## What's New in v1.4.0
+## What's New in v2.0.0
 
 - 🖥️ **Native macOS UI** — real vibrancy, hidden-inset title bar, grouped cards, native controls; window sized to content and quits on close
-- 🎨 **New brand logo** — used in-app (header) and as the app icon (`.icns`)
+- 🪟 **Windows build** — native installer (NSIS) with bundled FFmpeg
+- 🎨 **New brand logo** — used in-app (header) and as the app icon
+- 🎯 **Format-preserving output** — keeps the source's video codec, pixel format, and audio codec/bitrate (no forced re-format; fixes black-screen output on some players)
+- 🎮 **GPU acceleration for every quality preset** — VideoToolbox / NVENC / QSV / AMF (off by default)
 - 🔊 **Two-pass loudness normalization** for accurate -16 LUFS
-- 🎮 **GPU acceleration** — VideoToolbox / NVENC / QSV / AMF (off by default)
-- 🧱 **Bundled static FFmpeg** — runs without a system FFmpeg (fixes earlier builds that depended on Homebrew)
-- ⚙️ **spawn-based FFmpeg pipeline** (dropped `fluent-ffmpeg`), MP4-compatible output, Cancel button, no-audio handling
+- 🧱 **Bundled static FFmpeg** — runs without a system FFmpeg
+- ⚙️ **spawn-based FFmpeg pipeline** (dropped `fluent-ffmpeg`), Cancel button, no-audio handling
 - 📱 **Responsive layout** — adapts down to half-screen widths
 
 ## Tech
