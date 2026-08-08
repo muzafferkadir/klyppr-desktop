@@ -452,10 +452,15 @@ function buildLoudnormFilter(measured) {
 // ============================================================================
 
 function buildFilterScript(talkingRanges, normalizeAudio, loudnormFilter) {
-    const filterParts = talkingRanges.map((r, i) =>
-        `[0:v]trim=start=${r.start.toFixed(4)}:end=${r.end.toFixed(4)},setpts=PTS-STARTPTS[v${i}];` +
-        `[0:a]atrim=start=${r.start.toFixed(4)}:end=${r.end.toFixed(4)},asetpts=PTS-STARTPTS[a${i}]`
-    );
+    // Short fade in/out on each audio segment avoids click/pop at the cut points
+    // (waveform is rarely at zero-crossing where a segment is trimmed).
+    const FADE = 0.01;
+    const filterParts = talkingRanges.map((r, i) => {
+        const fadeOutStart = Math.max(0, (r.end - r.start) - FADE).toFixed(4);
+        return `[0:v]trim=start=${r.start.toFixed(4)}:end=${r.end.toFixed(4)},setpts=PTS-STARTPTS[v${i}];` +
+            `[0:a]atrim=start=${r.start.toFixed(4)}:end=${r.end.toFixed(4)},asetpts=PTS-STARTPTS,` +
+            `afade=t=in:st=0:d=${FADE},afade=t=out:st=${fadeOutStart}:d=${FADE}[a${i}]`;
+    });
 
     const concatInputs = talkingRanges.map((_, i) => `[v${i}][a${i}]`).join('');
 
