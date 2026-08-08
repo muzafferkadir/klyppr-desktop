@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
     <title>Klyppr - Automatic Video Silence Clipper</title>
@@ -12,76 +12,234 @@
     <div class="app-wrapper">
         <div class="container">
             <header class="header">
-                <div class="logo-container">
-                    <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path
-                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                    <h1 class="title">Klyppr</h1>
+                <div class="brand">
+                    <span class="logo-badge">
+                        <img class="logo-icon" src="public/logo.png" alt="Klyppr">
+                    </span>
+                    <span class="brand-text">
+                        <span class="title">Klyppr</span>
+                        <span class="subtitle">Automatic Video Silence Clipper</span>
+                    </span>
                 </div>
-                <p class="subtitle">Automatic Video Silence Clipper</p>
             </header>
 
             <main class="main-content">
-                <section class="file-selection">
-                    <div class="form-group">
-                        <label class="form-label">
-                            <svg class="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <path
-                                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                            </svg>
-                            Input Video
-                        </label>
-                        <div class="input-group" id="inputDropZone">
-                            <input type="text" id="inputPath" readonly placeholder="Select or drop video file..."
-                                class="file-input" data-tooltip="Select your input video file">
-                            <button class="browse-btn" data-tooltip="Browse for video">
-                                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2">
-                                    <path
-                                        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                <div class="content-grid">
+                    <!-- Left column: sources & presets -->
+                    <div class="col col-left">
+                        <section class="card">
+                            <h3 class="section-title">
+                                <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z" />
+                                    <path d="M13 2v7h7" />
                                 </svg>
-                                <span class="btn-text">Browse</span>
-                            </button>
-                        </div>
+                                Files
+                            </h3>
+                            <div class="file-selection">
+                                <div class="form-group">
+                                    <label class="form-label">Input Video</label>
+                                    <div class="input-group" id="inputDropZone">
+                                        <input type="text" id="inputPath" readonly
+                                            placeholder="Select or drop video file..." class="file-input"
+                                            data-tooltip="Select your input video file">
+                                        <button class="browse-btn" data-tooltip="Browse for video">
+                                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path
+                                                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                            </svg>
+                                            <span class="btn-text">Browse</span>
+                                        </button>
+                                    </div>
+                                    <span class="field-hint">Drag &amp; drop a video anywhere on this field</span>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label">Output Folder</label>
+                                    <div class="input-group">
+                                        <input type="text" id="outputPath" readonly
+                                            placeholder="Select output folder..." class="file-input"
+                                            data-tooltip="Select output folder">
+                                        <button class="browse-btn" data-tooltip="Browse for folder">
+                                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path
+                                                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                            </svg>
+                                            <span class="btn-text">Browse</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="card presets-section">
+                            <h3 class="section-title">
+                                <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                                </svg>
+                                Quick Presets
+                            </h3>
+                            <div class="button-group">
+                                <button class="preset-btn active" data-preset="recommended"
+                                    data-tooltip="Balanced quality and speed">
+                                    <span class="preset-badge">
+                                        <svg class="preset-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <circle cx="12" cy="12" r="10" />
+                                            <circle cx="12" cy="12" r="3" />
+                                        </svg>
+                                    </span>
+                                    <span class="preset-name">Recommended</span>
+                                    <span class="preset-desc">Balanced quality</span>
+                                    <span class="preset-check">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                                            stroke-linecap="round" stroke-linejoin="round">
+                                            <polyline points="20 6 9 17 4 12" />
+                                        </svg>
+                                    </span>
+                                </button>
+                                <button class="preset-btn" data-preset="fast"
+                                    data-tooltip="Faster processing, more aggressive">
+                                    <span class="preset-badge">
+                                        <svg class="preset-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                                        </svg>
+                                    </span>
+                                    <span class="preset-name">Aggressive</span>
+                                    <span class="preset-desc">Tight detection</span>
+                                    <span class="preset-check">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                                            stroke-linecap="round" stroke-linejoin="round">
+                                            <polyline points="20 6 9 17 4 12" />
+                                        </svg>
+                                    </span>
+                                </button>
+                            </div>
+                        </section>
                     </div>
 
-                    <div class="form-group">
-                        <label class="form-label">
-                            <svg class="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                            </svg>
-                            Output Folder
-                        </label>
-                        <div class="input-group">
-                            <input type="text" id="outputPath" readonly placeholder="Select output folder..."
-                                class="file-input" data-tooltip="Select output folder">
-                            <button class="browse-btn" data-tooltip="Browse for folder">
-                                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2">
+                    <!-- Right column: settings & run -->
+                    <div class="col col-right">
+                        <section class="card settings-section">
+                            <h3 class="section-title">
+                                <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
                                     <path
-                                        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                        d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
                                 </svg>
-                                <span class="btn-text">Browse</span>
-                            </button>
-                        </div>
+                                Advanced Settings
+                            </h3>
+                            <div id="customSettings" class="settings-group visible">
+                                <div class="settings-grid">
+                                    <div class="form-group">
+                                        <label class="form-label" data-tooltip="Lower values = more sensitive">
+                                            Silence Threshold
+                                            <span class="unit">dB</span>
+                                        </label>
+                                        <input type="number" id="silenceDb" value="-40" step="1" class="number-input">
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label class="form-label" data-tooltip="Minimum silence duration to detect">
+                                            Min. Silence
+                                            <span class="unit">sec</span>
+                                        </label>
+                                        <input type="number" id="minSilenceDuration" value="0.2" step="0.1" min="0"
+                                            class="number-input">
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label class="form-label"
+                                            data-tooltip="Keep this much audio before/after silence">
+                                            Padding
+                                            <span class="unit">sec</span>
+                                        </label>
+                                        <input type="number" id="paddingDuration" value="0.06" step="0.01" min="0"
+                                            class="number-input">
+                                    </div>
+
+                                    <div class="form-group form-group-wide">
+                                        <label class="form-label"
+                                            data-tooltip="Video quality preset - Higher quality = slower processing">
+                                            Video Quality
+                                        </label>
+                                        <select id="qualityPreset" class="select-input">
+                                            <option value="lossless" selected>Lossless (No Quality Loss, Largest File)
+                                            </option>
+                                            <option value="high">High (Best Quality, Slower)</option>
+                                            <option value="medium">Medium (Balanced)</option>
+                                            <option value="fast">Fast (Lower Quality, Faster)</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="checkbox-group">
+                                    <label class="checkbox-label" data-tooltip="Normalize audio to YouTube standards">
+                                        <span class="checkbox-text">
+                                            <span class="checkbox-title">
+                                                <svg class="checkbox-icon" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                    stroke-linejoin="round">
+                                                    <path d="M12 2v20M17 7H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+                                                </svg>
+                                                Normalize Audio (YouTube Standard)
+                                            </span>
+                                            <span class="checkbox-desc">Adjust volume to -16 LUFS (MrBeast/YouTube
+                                                level)</span>
+                                        </span>
+                                        <input type="checkbox" id="normalizeAudio" checked class="checkbox-input">
+                                    </label>
+
+                                    <label class="checkbox-label" id="gpuEncoderLabel"
+                                        data-tooltip="Use GPU for faster video encoding (if available)"
+                                        style="display: none;">
+                                        <span class="checkbox-text">
+                                            <span class="checkbox-title">
+                                                <svg class="checkbox-icon" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                                    stroke-linejoin="round">
+                                                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                                                    <rect x="9" y="9" width="6" height="6" />
+                                                    <line x1="9" y1="1" x2="9" y2="4" />
+                                                    <line x1="15" y1="1" x2="15" y2="4" />
+                                                    <line x1="9" y1="20" x2="9" y2="23" />
+                                                    <line x1="15" y1="20" x2="15" y2="23" />
+                                                    <line x1="20" y1="9" x2="23" y2="9" />
+                                                    <line x1="20" y1="14" x2="23" y2="14" />
+                                                    <line x1="1" y1="9" x2="4" y2="9" />
+                                                    <line x1="1" y1="14" x2="4" y2="14" />
+                                                </svg>
+                                                <span id="gpuEncoderTitle">GPU Acceleration</span>
+                                            </span>
+                                            <span class="checkbox-desc" id="gpuEncoderDesc">Detecting hardware
+                                                encoder...</span>
+                                        </span>
+                                        <input type="checkbox" id="useHardwareEncoder" class="checkbox-input">
+                                    </label>
+                                </div>
+                            </div>
+                        </section>
+
                     </div>
-                </section>
+                </div>
 
                 <section class="action-section">
                     <button id="startBtn" disabled class="start-btn"
                         data-tooltip="Select input and output first">
-                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polygon points="5 3 19 12 5 21 5 3" />
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                            <polygon points="6 4 20 12 6 20 6 4" />
                         </svg>
                         <span class="btn-text">Start Processing</span>
                     </button>
                     <button id="cancelBtn" class="cancel-btn" style="display: none;"
                         data-tooltip="Cancel current processing">
-                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="6" y="6" width="12" height="12" rx="1" />
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                            <rect x="6" y="6" width="12" height="12" rx="2" />
                         </svg>
                         <span class="btn-text">Cancel</span>
                     </button>
@@ -90,153 +248,11 @@
                 <section class="progress-section">
                     <div id="progress" class="progress-container">
                         <div class="progress-info">
-                            <span class="progress-label">Processing status:</span>
+                            <span class="progress-label">Status</span>
                             <span id="status" class="progress-status">Preparing...</span>
                         </div>
                         <div class="progress-bar">
                             <div class="progress-bar-fill" id="progressBar"></div>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="presets-section">
-                    <h3 class="section-title">
-                        <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                        </svg>
-                        Quick Presets
-                    </h3>
-                    <div class="button-group">
-                        <button class="preset-btn active" data-preset="recommended"
-                            data-tooltip="Balanced quality and speed">
-                            <svg class="preset-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <circle cx="12" cy="12" r="10" />
-                                <circle cx="12" cy="12" r="3" />
-                            </svg>
-                            <span class="preset-name">Recommended</span>
-                            <span class="preset-desc">Balanced quality</span>
-                        </button>
-                        <button class="preset-btn" data-preset="fast" data-tooltip="Faster processing, more aggressive">
-                            <svg class="preset-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                            </svg>
-                            <span class="preset-name">Aggressive</span>
-                            <span class="preset-desc">Tight detection</span>
-                        </button>
-                    </div>
-                </section>
-
-                <section class="settings-section">
-                    <h3 class="section-title">
-                        <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
-                            <path
-                                d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
-                        </svg>
-                        Advanced Settings
-                    </h3>
-                    <div id="customSettings" class="settings-group visible">
-                        <div class="settings-grid">
-                            <div class="form-group">
-                                <label class="form-label" data-tooltip="Lower values = more sensitive">
-                                    <svg class="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <path d="M11 5L6 9H2v6h4l5 4V5z" />
-                                        <line x1="23" y1="9" x2="17" y2="15" />
-                                        <line x1="17" y1="9" x2="23" y2="15" />
-                                    </svg>
-                                    Silence Threshold (dB)
-                                </label>
-                                <input type="number" id="silenceDb" value="-40" step="1" class="number-input">
-                            </div>
-
-                            <div class="form-group">
-                                <label class="form-label" data-tooltip="Minimum silence duration to detect">
-                                    <svg class="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <circle cx="12" cy="12" r="10" />
-                                        <polyline points="12 6 12 12 16 14" />
-                                    </svg>
-                                    Min. Silence Duration (sec)
-                                </label>
-                                <input type="number" id="minSilenceDuration" value="0.2" step="0.1" min="0"
-                                    class="number-input">
-                            </div>
-
-                            <div class="form-group">
-                                <label class="form-label" data-tooltip="Keep this much audio before/after silence">
-                                    <svg class="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <path
-                                            d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
-                                    </svg>
-                                    Padding Duration (sec)
-                                </label>
-                                <input type="number" id="paddingDuration" value="0.06" step="0.01" min="0"
-                                    class="number-input">
-                            </div>
-
-                            <div class="form-group">
-                                <label class="form-label"
-                                    data-tooltip="Video quality preset - Higher quality = slower processing">
-                                    <svg class="label-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <path
-                                            d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                                    </svg>
-                                    Video Quality
-                                </label>
-                                <select id="qualityPreset" class="select-input">
-                                    <option value="lossless" selected>Lossless (No Quality Loss, Largest File)</option>
-                                    <option value="high">High (Best Quality, Slower)</option>
-                                    <option value="medium">Medium (Balanced)</option>
-                                    <option value="fast">Fast (Lower Quality, Faster)</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="checkbox-group">
-                            <label class="checkbox-label" data-tooltip="Normalize audio to YouTube standards">
-                                <input type="checkbox" id="normalizeAudio" checked class="checkbox-input">
-                                <span class="checkbox-text">
-                                    <span class="checkbox-title">
-                                        <svg class="checkbox-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                            stroke-width="2">
-                                            <path d="M12 2v20M17 7H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-                                        </svg>
-                                        Normalize Audio (YouTube Standard)
-                                    </span>
-                                    <span class="checkbox-desc">Adjust volume to -16 LUFS (MrBeast/YouTube level)</span>
-                                </span>
-                            </label>
-
-                            <label class="checkbox-label" id="gpuEncoderLabel"
-                                data-tooltip="Use GPU for faster video encoding (if available)" style="display: none;">
-                                <input type="checkbox" id="useHardwareEncoder" class="checkbox-input">
-                                <span class="checkbox-text">
-                                    <span class="checkbox-title">
-                                        <svg class="checkbox-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                            stroke-width="2">
-                                            <rect x="4" y="4" width="16" height="16" rx="2" />
-                                            <rect x="9" y="9" width="6" height="6" />
-                                            <line x1="9" y1="1" x2="9" y2="4" />
-                                            <line x1="15" y1="1" x2="15" y2="4" />
-                                            <line x1="9" y1="20" x2="9" y2="23" />
-                                            <line x1="15" y1="20" x2="15" y2="23" />
-                                            <line x1="20" y1="9" x2="23" y2="9" />
-                                            <line x1="20" y1="14" x2="23" y2="14" />
-                                            <line x1="1" y1="9" x2="4" y2="9" />
-                                            <line x1="1" y1="14" x2="4" y2="14" />
-                                        </svg>
-                                        <span id="gpuEncoderTitle">GPU Acceleration</span>
-                                    </span>
-                                    <span class="checkbox-desc" id="gpuEncoderDesc">Detecting hardware encoder...</span>
-                                </span>
-                            </label>
                         </div>
                     </div>
                 </section>
@@ -249,7 +265,7 @@
                         </button>
                         <button class="log-copy-btn" id="logCopyBtn" title="Copy all logs">
                             <svg class="log-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                                 <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
                             </svg>
@@ -271,13 +287,15 @@
         <div class="modal-backdrop"></div>
         <div class="modal-content">
             <button class="modal-close">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18" />
                     <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
             </button>
             <div class="modal-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                    stroke-linejoin="round">
                     <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
                     <polyline points="22 4 12 14.01 9 11.01" />
                 </svg>
@@ -286,14 +304,16 @@
             <p class="modal-text">Your video has been successfully processed and is ready to use.</p>
             <div class="modal-buttons">
                 <button class="modal-btn modal-btn-primary">
-                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
                         <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                         <path d="M12 11v6M9 14l3 3 3-3" />
                     </svg>
                     Show in Folder
                 </button>
                 <button class="modal-btn modal-btn-secondary">
-                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18" />
                         <line x1="6" y1="6" x2="18" y2="18" />
                     </svg>

@@ -1,138 +1,96 @@
 # Klyppr Desktop
 
-> **📋 Latest Updates (v1.2.0):** Major improvements including audio normalization, video quality presets, improved UI/UX, and code refactoring
+> **📋 Latest (v1.4.0):** Native macOS UI (vibrancy + native window), a new brand logo, spawn-based FFmpeg pipeline with two-pass loudness normalization, and a bundled static FFmpeg so it runs anywhere.
 
 This is the desktop version of [Klyppr](https://github.com/muzafferkadir/klyppr), a tool for editing video silence.
 
 ## Features
 
 - Detect and remove silent parts from videos
-- **Audio normalization** - YouTube standard -16 LUFS loudness normalization
-- **Video quality presets** - Choose between Fast, Medium, and High quality settings
-- Adjustable silence threshold (dB)
-- Configurable minimum silence duration
-- Padding duration control for smooth transitions
-- User-friendly desktop interface with improved layout
-- Real-time progress tracking with accurate percentage display
-- Supports multiple video formats (mp4, avi, mov, mkv)
+- **Native macOS look** — vibrancy, native window (hidden-inset title bar), grouped cards, system controls
+- **GPU hardware acceleration** — auto-detected VideoToolbox (macOS) / NVENC / QSV / AMF (off by default)
+- **Two-pass audio normalization** — YouTube-standard -16 LUFS
+- **Video quality presets** — Lossless, High, Medium, Fast
+- **Cancel any time** — stop processing mid-run
+- Drag & drop input, adjustable silence threshold / min duration / padding
+- Real-time progress with ETA, MP4-compatible output (`yuv420p`, AAC, faststart)
+- Bundled **static FFmpeg** — no system FFmpeg required
+- Supports many formats (mp4, mov, mkv, avi, webm, and more)
 
 ## Installation
 
-1. Download the latest release for your operating system
+**[⬇️ Download the latest release](https://github.com/muzafferkadir/klyppr-desktop/releases/latest)**
 
-[Windows (x64)](https://github.com/muzafferkadir/klyppr-desktop/releases/download/v1.3.0/Klyppr-1.3.0-x32.exe)
-[MacOS (arm64)](https://github.com/muzafferkadir/klyppr-desktop/releases/download/v1.3.0/Klyppr-1.3.0-arm64.dmg)
+### macOS (app not signed)
 
-
-## macOS Instructions (App Not Signed)
-
-1. Download the latest release for your operating system.
-2. Move the application to your **Applications** folder.
-3. Try launching the app once — macOS may show this warning:
-
-**“The app is damaged and can’t be opened. You should move it to the Trash.”**
-
-### How to open it:
-
-1. Go to **System Settings → Privacy & Security**.
-2. Click **“Allow Anyway”** (or **“Open Anyway”**).
-3. Launch the app again.
-
-### Alternative (Terminal):
-
-```sh
-sudo xattr -rd com.apple.quarantine /Applications/Klyppr.app
-```
-
-After this, the app will open normally.
-
-4. Launch **Klyppr Desktop**.
-
-
-## Development Setup
-
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Set up FFmpeg binaries:
-   - Create the following directory structure:
+1. Move **Klyppr** to your **Applications** folder.
+2. If macOS says the app "is damaged" or is from an unidentified developer:
+   - **System Settings → Privacy & Security → Open Anyway**, or run:
+     ```sh
+     xattr -rd com.apple.quarantine /Applications/Klyppr.app
      ```
-     bin/
-     ├── mac/
-     │   ├── ffmpeg
-     │   └── ffprobe
-     └── win/
-         ├── ffmpeg.exe
-         └── ffprobe.exe
-     ```
-   - Download FFmpeg binaries and Place the binaries in their respective directories as shown above
-4. Run the development server:
-   ```bash
-   npm run start
-   ```
-
-## Building
-
-Build for specific platforms:
-
-```bash
-# For macOS
-npm run build:mac
-
-# For Windows 64-bit
-npm run build:win64
-
-# For Windows 32-bit
-npm run build:win32
-```
-
-The built applications will be available in the `dist` directory.
+3. Launch Klyppr.
 
 ## Usage
 
-1. Click "Browse" to select your input video file
-2. Choose an output folder for the processed video
-3. Select a quality preset (optional):
-   - **Fast** - Faster processing, lower quality
-   - **Medium** - Balanced quality and speed (default)
-   - **High** - Best quality, slower processing
-   - **Aggressive** - Tight detection for minimal silence
-4. Adjust advanced settings (optional):
-   - Silence Threshold (dB): Default -35dB
-   - Minimum Silence Duration (seconds): Default 0.5s
-   - Padding Duration (seconds): Default 0.05s
-   - Enable audio normalization (YouTube standard -16 LUFS)
-5. Click "Start Processing" to begin
-6. Monitor the progress in real-time with detailed logs
-7. Find your processed video in the selected output folder
-
-## What's New in v1.2.0
-
-- ✨ **Audio Normalization** - Automatically normalize audio to YouTube standard (-16 LUFS)
-- 🎨 **Video Quality Presets** - Choose from Fast, Medium, High, or Aggressive presets
-- 🚀 **Performance Improvements** - Optimized silence detection using audio-only processing
-- 🔧 **Code Refactoring** - Improved code organization following DRY and SOLID principles
-- 🎯 **Better Progress Tracking** - Accurate progress percentage calculations
-- 💅 **UI/UX Enhancements** - Improved layout, standardized spacing, and better responsive design
-- 🐛 **Bug Fixes** - Fixed Windows command line length issues with long select filters
+1. Select (or drag & drop) your input video
+2. Choose an output folder
+3. Pick a preset — **Recommended** or **Aggressive** — or tune Advanced Settings:
+   - Silence Threshold (dB), Min. Silence (sec), Padding (sec)
+   - Video Quality: Lossless / High / Medium / Fast
+   - Normalize Audio (-16 LUFS), GPU Acceleration (if available)
+4. Click **Start Processing** (use **Cancel** to stop)
+5. Find your processed video in the output folder
 
 ## Development
 
-This is an Electron-based application using:
-- Electron
-- FFmpeg for video processing
-- Node.js
+```bash
+yarn install
+yarn start
+```
+
+FFmpeg binaries are **not** committed (see `.gitignore`). Before building, place **static** `ffmpeg`/`ffprobe` in:
+
+```
+bin/
+├── mac/   (ffmpeg, ffprobe — static arm64)
+└── win/   (ffmpeg.exe, ffprobe.exe)
+```
+
+> Use **static** builds (e.g. from a trusted source). Dynamically-linked binaries copied from Homebrew will not run on other machines.
+
+## Building
+
+```bash
+yarn build:mac      # macOS .dmg
+yarn build:win64    # Windows 64-bit
+yarn build:win32    # Windows 32-bit
+```
+
+Output goes to the `dist` directory.
+
+## What's New in v1.4.0
+
+- 🖥️ **Native macOS UI** — real vibrancy, hidden-inset title bar, grouped cards, native controls; window sized to content and quits on close
+- 🎨 **New brand logo** — used in-app (header) and as the app icon (`.icns`)
+- 🔊 **Two-pass loudness normalization** for accurate -16 LUFS
+- 🎮 **GPU acceleration** — VideoToolbox / NVENC / QSV / AMF (off by default)
+- 🧱 **Bundled static FFmpeg** — runs without a system FFmpeg (fixes earlier builds that depended on Homebrew)
+- ⚙️ **spawn-based FFmpeg pipeline** (dropped `fluent-ffmpeg`), MP4-compatible output, Cancel button, no-audio handling
+- 📱 **Responsive layout** — adapts down to half-screen widths
+
+## Tech
+
+Electron · FFmpeg (invoked directly via `child_process`) · Node.js
 
 ## Contributors
 
-Special thanks to [@parsherr](https://github.com/parsherr) for their contributions to this project!
+Special thanks to [@parsherr](https://github.com/parsherr) for their contributions.
 
-## Related Projects
+## Related
 
-- [Klyppr Web Version](https://github.com/muzafferkadir/klyppr) - The web-based version of Klyppr
+- [Klyppr Web](https://github.com/muzafferkadir/klyppr) — the web version
 
 ## License
 
-MIT License 
+MIT License — see [LICENSE](LICENSE).
