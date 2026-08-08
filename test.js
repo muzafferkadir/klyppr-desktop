@@ -384,7 +384,7 @@ async function test_05_singlePassProcessing(talkingRanges) {
     const outputOptions = [
         '-hide_banner',
         '-i', TEST_VIDEO,
-        '-filter_complex_script', scriptPath,
+        '-/filter_complex', scriptPath,
         '-map', '[outv]',
         '-map', '[outa]',
         '-c:v', encoding.videoCodec,
@@ -461,7 +461,7 @@ async function test_06_withNormalization(talkingRanges) {
     const outputOptions = [
         '-hide_banner',
         '-i', TEST_VIDEO,
-        '-filter_complex_script', scriptPath,
+        '-/filter_complex', scriptPath,
         '-map', '[outv]',
         '-map', '[outa]',
         '-c:v', encoding.videoCodec,

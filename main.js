@@ -124,7 +124,10 @@ function runFFmpeg(args, { onLine, onProgress } = {}) {
             if (onLine && lineBuffer) onLine(lineBuffer);
             if (isCancelled) return reject(new Error('Processing cancelled'));
             if (code === 0) resolve(fullStderr);
-            else reject(new Error(`FFmpeg exited with code ${code}`));
+            else {
+                const tail = fullStderr.trim().split('\n').slice(-3).join(' | ');
+                reject(new Error(`FFmpeg exited with code ${code}${tail ? `: ${tail}` : ''}`));
+            }
         });
     });
 }
@@ -495,7 +498,7 @@ async function processVideoWithFilter(inputFile, outputFile, filterScriptPath, q
     const args = [
         '-hide_banner',
         '-i', inputFile,
-        '-filter_complex_script', filterScriptPath,
+        '-/filter_complex', filterScriptPath,
         '-map', '[outv]',
         '-map', '[outa]',
         '-map_metadata', '0',
