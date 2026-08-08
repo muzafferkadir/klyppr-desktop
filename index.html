@@ -78,6 +78,13 @@
                         </svg>
                         <span class="btn-text">Start Processing</span>
                     </button>
+                    <button id="cancelBtn" class="cancel-btn" style="display: none;"
+                        data-tooltip="Cancel current processing">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="6" y="6" width="12" height="12" rx="1" />
+                        </svg>
+                        <span class="btn-text">Cancel</span>
+                    </button>
                 </section>
 
                 <section class="progress-section">
@@ -144,7 +151,7 @@
                                     </svg>
                                     Silence Threshold (dB)
                                 </label>
-                                <input type="number" id="silenceDb" value="-35" step="1" class="number-input">
+                                <input type="number" id="silenceDb" value="-40" step="1" class="number-input">
                             </div>
 
                             <div class="form-group">
@@ -156,7 +163,7 @@
                                     </svg>
                                     Min. Silence Duration (sec)
                                 </label>
-                                <input type="number" id="minSilenceDuration" value="0.5" step="0.1" min="0"
+                                <input type="number" id="minSilenceDuration" value="0.2" step="0.1" min="0"
                                     class="number-input">
                             </div>
 
@@ -169,7 +176,7 @@
                                     </svg>
                                     Padding Duration (sec)
                                 </label>
-                                <input type="number" id="paddingDuration" value="0.05" step="0.01" min="0"
+                                <input type="number" id="paddingDuration" value="0.06" step="0.01" min="0"
                                     class="number-input">
                             </div>
 
@@ -184,10 +191,10 @@
                                     Video Quality
                                 </label>
                                 <select id="qualityPreset" class="select-input">
-                                    <option value="fast">Fast (Lower Quality, Faster)</option>
-                                    <option value="medium" selected>Medium (Balanced)</option>
+                                    <option value="lossless" selected>Lossless (No Quality Loss, Largest File)</option>
                                     <option value="high">High (Best Quality, Slower)</option>
-                                    <option value="lossless">Lossless (No Quality Loss, Largest File)</option>
+                                    <option value="medium">Medium (Balanced)</option>
+                                    <option value="fast">Fast (Lower Quality, Faster)</option>
                                 </select>
                             </div>
                         </div>
@@ -209,7 +216,7 @@
 
                             <label class="checkbox-label" id="gpuEncoderLabel"
                                 data-tooltip="Use GPU for faster video encoding (if available)" style="display: none;">
-                                <input type="checkbox" id="useHardwareEncoder" checked class="checkbox-input">
+                                <input type="checkbox" id="useHardwareEncoder" class="checkbox-input">
                                 <span class="checkbox-text">
                                     <span class="checkbox-title">
                                         <svg class="checkbox-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"

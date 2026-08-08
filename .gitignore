@@ -7,4 +7,4 @@ dist
 .concat_list.txt
 temp_ffmpeg
 bin/*
-videos
+.env

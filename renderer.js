@@ -4,9 +4,9 @@
 
 const presets = {
     recommended: {
-        silenceDb: -35,
-        minSilenceDuration: 0.5,
-        paddingDuration: 0.05
+        silenceDb: -40,
+        minSilenceDuration: 0.2,
+        paddingDuration: 0.06
     },
     fast: {
         silenceDb: -30,
@@ -71,7 +71,11 @@ function startProcessing() {
         useHardwareEncoder: params.useHardwareEncoder
     });
 
-    $('startBtn').disabled = true;
+    $('startBtn').style.display = 'none';
+    const cancelBtn = $('cancelBtn');
+    cancelBtn.style.display = '';
+    cancelBtn.disabled = false;
+    cancelBtn.querySelector('.btn-text').textContent = 'Cancel';
     $('progress').style.display = 'block';
     $('logSection').style.display = 'block';
     $('status').textContent = 'Starting process...';
@@ -84,6 +88,14 @@ function startProcessing() {
     $('logToggleBtn').querySelector('.log-toggle-text').textContent = 'Show Processing Logs';
 
     window.klyppr.startProcessing(params);
+}
+
+function cancelProcessing() {
+    const cancelBtn = $('cancelBtn');
+    cancelBtn.disabled = true;
+    cancelBtn.querySelector('.btn-text').textContent = 'Cancelling...';
+    $('status').textContent = 'Cancelling...';
+    window.klyppr.cancelProcessing();
 }
 
 // ============================================================================
@@ -216,10 +228,12 @@ function setupIPC() {
     });
 
     window.klyppr.onCompleted((result) => {
+        $('startBtn').style.display = '';
         $('startBtn').disabled = false;
-        $('status').textContent = result.success ? 'Process completed!' : 'Error occurred!';
+        $('cancelBtn').style.display = 'none';
 
         if (result.success) {
+            $('status').textContent = 'Process completed!';
             currentOutputFile = result.outputFile;
             $('progressBar').style.width = '100%';
             showCompletionModal();
@@ -228,6 +242,11 @@ function setupIPC() {
                 $('progress').style.display = 'none';
                 $('progressBar').style.width = '0%';
             }, 1000);
+        } else if (result.cancelled) {
+            $('status').textContent = 'Processing cancelled';
+            $('progressBar').style.width = '0%';
+        } else {
+            $('status').textContent = result.error ? `Error: ${result.error}` : 'Error occurred!';
         }
     });
 
@@ -241,9 +260,9 @@ function setupIPC() {
             label.style.display = '';
             title.textContent = `GPU Acceleration (${info.name})`;
             desc.textContent = info.description;
-            // Only default to true if user hasn't restored a saved preference
+            // GPU stays off by default; honor a restored saved preference only
             if (!checkbox.dataset.restored) {
-                checkbox.checked = true;
+                checkbox.checked = false;
             }
         } else {
             label.style.display = 'none';
@@ -265,6 +284,9 @@ function setupEventBindings() {
 
     // Start button
     $('startBtn').addEventListener('click', startProcessing);
+
+    // Cancel button
+    $('cancelBtn').addEventListener('click', cancelProcessing);
 
     // Preset buttons
     document.querySelectorAll('.preset-btn').forEach(button => {

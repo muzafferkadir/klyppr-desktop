@@ -443,6 +443,32 @@ button {
     height: 20px;
 }
 
+/* Cancel Button */
+.cancel-btn {
+    width: 100%;
+    padding: 1rem 2rem;
+    font-size: 1rem;
+    font-weight: 600;
+    background: #ef4444;
+    color: #fff;
+    border-radius: var(--border-radius);
+}
+
+.cancel-btn:active:not(:disabled) {
+    transform: scale(0.98);
+}
+
+.cancel-btn:disabled {
+    background: rgba(239, 68, 68, 0.5);
+    color: rgba(255, 255, 255, 0.7);
+    cursor: not-allowed;
+}
+
+.cancel-btn .btn-icon {
+    width: 20px;
+    height: 20px;
+}
+
 /* Progress */
 .progress-container {
     display: none;

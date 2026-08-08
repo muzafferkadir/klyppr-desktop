@@ -22,36 +22,38 @@
       "!dist/*",
       "!build/*"
     ],
-    "extraResources": [
-      {
-        "from": "bin/mac/ffmpeg",
-        "to": "bin/ffmpeg"
-      },
-      {
-        "from": "bin/mac/ffprobe",
-        "to": "bin/ffprobe"
-      },
-      {
-        "from": "bin/win/ffmpeg.exe",
-        "to": "bin/ffmpeg.exe"
-      },
-      {
-        "from": "bin/win/ffprobe.exe",
-        "to": "bin/ffprobe.exe"
-      }
-    ],
     "mac": {
       "category": "public.app-category.video",
       "target": [
         "dmg"
       ],
-      "icon": "public/logo.png"
+      "icon": "public/logo.png",
+      "extraResources": [
+        {
+          "from": "bin/mac/ffmpeg",
+          "to": "bin/ffmpeg"
+        },
+        {
+          "from": "bin/mac/ffprobe",
+          "to": "bin/ffprobe"
+        }
+      ]
     },
     "win": {
       "target": [
         "nsis"
       ],
-      "icon": "public/logo.png"
+      "icon": "public/logo.png",
+      "extraResources": [
+        {
+          "from": "bin/win/ffmpeg.exe",
+          "to": "bin/ffmpeg.exe"
+        },
+        {
+          "from": "bin/win/ffprobe.exe",
+          "to": "bin/ffprobe.exe"
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -71,9 +73,8 @@
     "ffmpeg"
   ],
   "author": "Muzaffer Kadir YILMAZ",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
-    "fluent-ffmpeg": "^2.1.3",
     "fs-extra": "^11.3.0"
   },
   "devDependencies": {

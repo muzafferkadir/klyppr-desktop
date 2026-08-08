@@ -8,8 +8,8 @@
  */
 
 const path = require('path');
-const ffmpeg = require('fluent-ffmpeg');
 const fs = require('fs-extra');
+const { spawn, execFile } = require('child_process');
 
 // ============================================================================
 // CONFIG
@@ -33,9 +33,6 @@ const ffprobePath = fs.existsSync(path.join(binDir, 'ffprobe'))
     ? path.join(binDir, 'ffprobe')
     : systemFfprobe;
 
-ffmpeg.setFfmpegPath(ffmpegPath);
-ffmpeg.setFfprobePath(ffprobePath);
-
 console.log(`📍 FFmpeg: ${ffmpegPath}`);
 console.log(`📍 FFprobe: ${ffprobePath}`);
 console.log(`📍 Test video: ${TEST_VIDEO}`);
@@ -57,12 +54,45 @@ const QUALITY_SETTINGS = {
 // FUNCTIONS UNDER TEST (copied from main.js for isolation)
 // ============================================================================
 
+function runFFmpeg(args, onLine) {
+    return new Promise((resolve, reject) => {
+        const proc = spawn(ffmpegPath, args);
+        let stderr = '';
+        let buf = '';
+        proc.stderr.on('data', (chunk) => {
+            const text = chunk.toString();
+            stderr += text;
+            if (onLine) {
+                buf += text;
+                let nl;
+                while ((nl = buf.search(/\r?\n/)) !== -1) {
+                    const line = buf.slice(0, nl);
+                    buf = buf.slice(nl + (buf[nl] === '\r' && buf[nl + 1] === '\n' ? 2 : 1));
+                    if (line) onLine(line);
+                }
+            }
+        });
+        proc.on('error', reject);
+        proc.on('close', (code) => {
+            if (onLine && buf) onLine(buf);
+            code === 0 ? resolve(stderr) : reject(new Error(`ffmpeg exited with code ${code}`));
+        });
+    });
+}
+
 function getVideoMetadata(inputFile) {
     return new Promise((resolve, reject) => {
-        ffmpeg.ffprobe(inputFile, (err, metadata) => {
-            if (err) reject(err);
-            else resolve(metadata);
-        });
+        execFile(ffprobePath,
+            ['-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', inputFile],
+            { maxBuffer: 20 * 1024 * 1024 },
+            (err, stdout) => {
+                if (err) return reject(err);
+                try {
+                    const meta = JSON.parse(stdout);
+                    if (meta.format && meta.format.duration != null) meta.format.duration = parseFloat(meta.format.duration);
+                    resolve(meta);
+                } catch (e) { reject(e); }
+            });
     });
 }
 
@@ -212,16 +242,13 @@ async function test_02_silenceDetection() {
 
     const start = Date.now();
 
-    const silenceRanges = await new Promise((resolve, reject) => {
+    const silenceRanges = await (async () => {
         const ranges = [];
         let startTime = null;
 
-        ffmpeg(TEST_VIDEO)
-            .inputOptions(['-vn'])     // Audio-only — the optimization we're testing
-            .outputOptions(['-f', 'null'])
-            .audioFilters(`silencedetect=noise=${params.silenceDb}dB:d=${params.minSilenceDuration}`)
-            .output('-')
-            .on('stderr', line => {
+        await runFFmpeg(
+            ['-hide_banner', '-vn', '-i', TEST_VIDEO, '-af', `silencedetect=noise=${params.silenceDb}dB:d=${params.minSilenceDuration}`, '-f', 'null', '-'],
+            (line) => {
                 const { start, end } = parseSilenceLine(line);
 
                 if (start !== null) startTime = start;
@@ -235,11 +262,11 @@ async function test_02_silenceDetection() {
                     }
                     startTime = null;
                 }
-            })
-            .on('end', () => resolve(ranges))
-            .on('error', reject)
-            .run();
-    });
+            }
+        );
+
+        return ranges;
+    })();
 
     const elapsed = Date.now() - start;
 
@@ -354,36 +381,24 @@ async function test_05_singlePassProcessing(talkingRanges) {
 
     const start = Date.now();
 
-    await new Promise((resolve, reject) => {
-        const outputOptions = [
-            '-filter_complex_script', scriptPath,
-            '-map', '[outv]',
-            '-map', '[outa]',
-            '-c:v', encoding.videoCodec,
-            ...encoding.videoQuality,
-            '-c:a', encoding.audioCodec,
-            '-b:a', encoding.audioBitrate,
-            '-avoid_negative_ts', 'make_zero'
-        ];
-        if (encoding.extraOptions) outputOptions.push(...encoding.extraOptions);
+    const outputOptions = [
+        '-hide_banner',
+        '-i', TEST_VIDEO,
+        '-filter_complex_script', scriptPath,
+        '-map', '[outv]',
+        '-map', '[outa]',
+        '-c:v', encoding.videoCodec,
+        ...encoding.videoQuality,
+        '-pix_fmt', 'yuv420p',
+        '-c:a', encoding.audioCodec,
+        '-b:a', encoding.audioBitrate,
+        '-avoid_negative_ts', 'make_zero'
+    ];
+    if (encoding.extraOptions) outputOptions.push(...encoding.extraOptions);
+    outputOptions.push('-y', outputFile);
 
-        ffmpeg(TEST_VIDEO)
-            .outputOptions(outputOptions)
-            .on('start', cmd => {
-                console.log(`  ⚙️ FFmpeg command started`);
-            })
-            .on('progress', progress => {
-                if (progress && progress.timemark) {
-                    process.stdout.write(`\r  ⏳ Processing... timemark: ${progress.timemark}    `);
-                }
-            })
-            .on('end', () => {
-                process.stdout.write('\r');
-                resolve();
-            })
-            .on('error', reject)
-            .save(outputFile);
-    });
+    console.log(`  ⚙️ FFmpeg command started`);
+    await runFFmpeg(outputOptions);
 
     const elapsed = Date.now() - start;
 
@@ -443,33 +458,24 @@ async function test_06_withNormalization(talkingRanges) {
 
     const start = Date.now();
 
-    await new Promise((resolve, reject) => {
-        const outputOptions = [
-            '-filter_complex_script', scriptPath,
-            '-map', '[outv]',
-            '-map', '[outa]',
-            '-c:v', encoding.videoCodec,
-            ...encoding.videoQuality,
-            '-c:a', encoding.audioCodec,
-            '-b:a', encoding.audioBitrate,
-            '-avoid_negative_ts', 'make_zero'
-        ];
-        if (encoding.extraOptions) outputOptions.push(...encoding.extraOptions);
+    const outputOptions = [
+        '-hide_banner',
+        '-i', TEST_VIDEO,
+        '-filter_complex_script', scriptPath,
+        '-map', '[outv]',
+        '-map', '[outa]',
+        '-c:v', encoding.videoCodec,
+        ...encoding.videoQuality,
+        '-pix_fmt', 'yuv420p',
+        '-c:a', encoding.audioCodec,
+        '-b:a', encoding.audioBitrate,
+        '-avoid_negative_ts', 'make_zero'
+    ];
+    if (encoding.extraOptions) outputOptions.push(...encoding.extraOptions);
+    outputOptions.push('-y', outputFile);
 
-        ffmpeg(TEST_VIDEO)
-            .outputOptions(outputOptions)
-            .on('progress', progress => {
-                if (progress && progress.timemark) {
-                    process.stdout.write(`\r  ⏳ Processing with normalization... timemark: ${progress.timemark}    `);
-                }
-            })
-            .on('end', () => {
-                process.stdout.write('\r');
-                resolve();
-            })
-            .on('error', reject)
-            .save(outputFile);
-    });
+    console.log(`  ⏳ Processing with normalization...`);
+    await runFFmpeg(outputOptions);
 
     const elapsed = Date.now() - start;
 
