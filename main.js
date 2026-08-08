@@ -29,13 +29,30 @@ const VIDEO_EXTENSIONS = [
 // GPU encoder quality settings (higher = better quality)
 const HW_QUALITY_SETTINGS = {
     // VideoToolbox (macOS) — uses quality percentage (1-100)
-    videotoolbox: { fast: 35, medium: 55, high: 75 },
+    videotoolbox: { fast: 35, medium: 55, high: 75, lossless: 90 },
     // NVENC (NVIDIA) — uses CQ value (lower = better, like CRF)
-    nvenc: { fast: 32, medium: 24, high: 18 },
+    nvenc: { fast: 32, medium: 24, high: 18, lossless: 16 },
     // QSV (Intel) — uses global_quality
-    qsv: { fast: 32, medium: 24, high: 18 },
+    qsv: { fast: 32, medium: 24, high: 18, lossless: 16 },
     // AMF (AMD) — uses quality level
-    amf: { fast: 32, medium: 24, high: 18 }
+    amf: { fast: 32, medium: 24, high: 18, lossless: 16 }
+};
+
+// Map the INPUT video codec to a matching encoder per backend, so the output keeps
+// the same codec it came in with (h264 in → h264 out, hevc in → hevc out, …).
+const VIDEO_ENCODERS = {
+    h264: { sw: 'libx264', nvenc: 'h264_nvenc', videotoolbox: 'h264_videotoolbox', qsv: 'h264_qsv', amf: 'h264_amf' },
+    hevc: { sw: 'libx265', nvenc: 'hevc_nvenc', videotoolbox: 'hevc_videotoolbox', qsv: 'hevc_qsv', amf: 'hevc_amf' },
+    vp9:  { sw: 'libvpx-vp9' },
+    av1:  { sw: 'libsvtav1' },
+    mpeg4: { sw: 'mpeg4' }
+};
+
+// Map the INPUT audio codec to a matching encoder, so audio stays the same codec.
+const AUDIO_ENCODERS = {
+    aac: 'aac', mp3: 'libmp3lame', opus: 'libopus', vorbis: 'libvorbis',
+    ac3: 'ac3', eac3: 'eac3', flac: 'flac', alac: 'alac',
+    pcm_s16le: 'pcm_s16le', pcm_s24le: 'pcm_s24le'
 };
 
 // Resolved at startup
@@ -292,6 +309,22 @@ function hasAudioStream(metadata) {
     return !!(metadata && metadata.streams && metadata.streams.some(s => s.codec_type === 'audio'));
 }
 
+// Pull the input's real codec/pixel-format/audio params so we can reproduce them on
+// output instead of imposing our own. "As it went in, so it comes out."
+function extractStreamInfo(metadata) {
+    const streams = (metadata && metadata.streams) || [];
+    const v = streams.find(s => s.codec_type === 'video') || {};
+    const a = streams.find(s => s.codec_type === 'audio') || {};
+    const abr = parseInt(a.bit_rate, 10);
+    return {
+        vcodec: (v.codec_name || 'h264').toLowerCase(),
+        pixFmt: v.pix_fmt || 'yuv420p',
+        acodec: (a.codec_name || 'aac').toLowerCase(),
+        // keep the source audio bitrate when known (rounded to kbps), else a safe default
+        abitrate: (abr && isFinite(abr)) ? `${Math.round(abr / 1000)}k` : null
+    };
+}
+
 function getFrameRate(metadata) {
     const v = metadata.streams && metadata.streams.find(s => s.codec_type === 'video');
     if (!v) return 30;
@@ -345,68 +378,66 @@ function calculateTalkingRanges(silenceRanges, videoDuration) {
 // ENCODING SETTINGS
 // ============================================================================
 
-function getEncodingOptions(qualityPreset = 'medium', useHardwareEncoder = true) {
+function getEncodingOptions(qualityPreset = 'medium', useHardwareEncoder = true, streamInfo = null) {
     const preset = qualityPreset || 'medium';
+    const isHigh = preset === 'high' || preset === 'lossless';
+    const info = streamInfo || {};
 
-    // Lossless always uses the software encoder — hardware encoders don't do true lossless
-    if (preset === 'lossless') {
-        return {
-            videoCodec: 'libx264',
-            videoQuality: ['-preset', 'slow', '-crf', '0'],
-            audioCodec: 'aac',
-            audioBitrate: '320k',
-            isHardware: false
-        };
-    }
+    // Reproduce the INPUT's own formats instead of imposing ours:
+    //   - video encoder matches the input codec (h264→libx264/…, hevc→libx265/…)
+    //   - pixel format is carried through unchanged (keeps 4:2:0 as 4:2:0, etc.)
+    //   - audio keeps its codec and (when known) its bitrate
+    const inVcodec = (info.vcodec || 'h264').toLowerCase();
+    const pixFmt = info.pixFmt || 'yuv420p';
+    const audioCodec = AUDIO_ENCODERS[(info.acodec || 'aac').toLowerCase()] || 'aac';
+    const audioBitrate = info.abitrate || '320k';
+    const family = VIDEO_ENCODERS[inVcodec] || VIDEO_ENCODERS.h264;
 
-    // GPU hardware encoding (if detected AND user opted in)
-    if (detectedHWEncoder && useHardwareEncoder) {
+    // Quality knob per preset. NEVER crf 0 — libx264 tags true-lossless as
+    // "High 4:4:4 Predictive", which hardware/software players render as a black screen.
+    // We do NOT pass -profile:v; the encoder derives the right profile from pixFmt.
+    const crf = preset === 'fast' ? 28 : preset === 'high' ? 18 : preset === 'lossless' ? 16 : 23;
+
+    // GPU path — only when this GPU actually has an encoder for the input's codec.
+    if (detectedHWEncoder && useHardwareEncoder && family[detectedHWEncoder.type]) {
         const hwQuality = HW_QUALITY_SETTINGS[detectedHWEncoder.type] || {};
-        const qVal = hwQuality[preset] || hwQuality.medium;
-
+        const qVal = hwQuality[preset] || hwQuality.high || hwQuality.medium;
         let videoQuality;
         switch (detectedHWEncoder.type) {
             case 'videotoolbox':
-                // -q:v is quality percentage for VideoToolbox (higher = better)
-                videoQuality = ['-q:v', qVal.toString()];
+                videoQuality = ['-q:v', String(qVal)];
                 break;
             case 'nvenc':
-                // NVENC: preset + constant quality
-                videoQuality = ['-preset', preset === 'fast' ? 'p1' : preset === 'high' ? 'p7' : 'p4',
-                    '-cq', qVal.toString(), '-rc', 'vbr'];
+                videoQuality = ['-preset', preset === 'fast' ? 'p1' : isHigh ? 'p7' : 'p4', '-cq', String(qVal), '-rc', 'vbr'];
                 break;
             case 'qsv':
-                // QSV: global_quality
-                videoQuality = ['-global_quality', qVal.toString(), '-look_ahead', '1'];
+                videoQuality = ['-global_quality', String(qVal), '-look_ahead', '1'];
                 break;
             case 'amf':
-                // AMF: quality preset + qp
-                videoQuality = ['-quality', preset === 'fast' ? 'speed' : preset === 'high' ? 'quality' : 'balanced',
-                    '-qp_i', qVal.toString(), '-qp_p', qVal.toString()];
+                videoQuality = ['-quality', preset === 'fast' ? 'speed' : isHigh ? 'quality' : 'balanced', '-qp_i', String(qVal), '-qp_p', String(qVal)];
                 break;
             default:
-                videoQuality = ['-q:v', qVal.toString()];
+                videoQuality = ['-q:v', String(qVal)];
         }
-
-        return {
-            videoCodec: detectedHWEncoder.codec,
-            videoQuality,
-            audioCodec: 'aac',
-            audioBitrate: '128k',
-            isHardware: true
-        };
+        return { videoCodec: family[detectedHWEncoder.type], videoQuality, pixFmt, audioCodec, audioBitrate, isHardware: true };
     }
 
-    // Software encoding fallback
-    return {
-        videoCodec: 'libx264',
-        videoQuality: preset === 'fast' ? ['-preset', 'ultrafast', '-crf', '28'] :
-            preset === 'high' ? ['-preset', 'medium', '-crf', '18'] :
-                ['-preset', 'veryfast', '-crf', '23'],
-        audioCodec: 'aac',
-        audioBitrate: '128k',
-        isHardware: false
-    };
+    // Software path — encoder matches the input codec family.
+    const sw = family.sw || 'libx264';
+    let videoQuality;
+    if (sw === 'libvpx-vp9') {
+        videoQuality = ['-crf', String(crf), '-b:v', '0'];
+    } else if (sw === 'libx265') {
+        videoQuality = ['-preset', preset === 'fast' ? 'veryfast' : isHigh ? 'medium' : 'fast', '-crf', String(crf)];
+    } else if (sw === 'libsvtav1') {
+        videoQuality = ['-crf', String(crf), '-preset', preset === 'fast' ? '10' : '6'];
+    } else if (sw === 'mpeg4') {
+        videoQuality = ['-q:v', preset === 'fast' ? '6' : isHigh ? '2' : '4'];
+    } else {
+        // libx264
+        videoQuality = ['-preset', preset === 'fast' ? 'veryfast' : isHigh ? 'medium' : 'veryfast', '-crf', String(crf)];
+    }
+    return { videoCodec: sw, videoQuality, pixFmt, audioCodec, audioBitrate, isHardware: false };
 }
 
 // ============================================================================
@@ -496,10 +527,10 @@ function formatEta(percent, elapsed) {
 // VIDEO PROCESSING (trim+atrim+concat via filter_complex_script)
 // ============================================================================
 
-async function processVideoWithFilter(inputFile, outputFile, filterScriptPath, qualityPreset, expectedDuration, gopSize, event, useHardwareEncoder = true) {
+async function processVideoWithFilter(inputFile, outputFile, filterScriptPath, qualityPreset, expectedDuration, gopSize, event, useHardwareEncoder = true, streamInfo = null) {
     if (isCancelled) throw new Error('Processing cancelled');
 
-    const encoding = getEncodingOptions(qualityPreset, useHardwareEncoder);
+    const encoding = getEncodingOptions(qualityPreset, useHardwareEncoder, streamInfo);
     const args = [
         '-hide_banner',
         '-i', inputFile,
@@ -509,7 +540,7 @@ async function processVideoWithFilter(inputFile, outputFile, filterScriptPath, q
         '-map_metadata', '0',
         '-c:v', encoding.videoCodec,
         ...encoding.videoQuality,
-        '-pix_fmt', 'yuv420p',
+        '-pix_fmt', encoding.pixFmt,
         ...(gopSize ? ['-g', String(gopSize)] : []),
         '-c:a', encoding.audioCodec,
         '-b:a', encoding.audioBitrate,
@@ -561,7 +592,7 @@ async function normalizeAudioOnly(inputFile, outputFile, qualityPreset, event, m
         ? `✅ Loudness measured (I=${measured.input_i} LUFS) — applying (pass 2/2)`
         : `⚠️ Measurement unavailable — using single-pass loudnorm`);
 
-    const encoding = getEncodingOptions(qualityPreset);
+    const encoding = getEncodingOptions(qualityPreset, false, extractStreamInfo(metadata));
     const args = [
         '-hide_banner',
         '-i', inputFile,
@@ -664,6 +695,7 @@ async function detectSilence(inputFile, params, event) {
 
 async function processVideo(inputFile, outputFile, silenceRanges, normalizeAudio, qualityPreset, event, useHardwareEncoder, metadata) {
     const inputDuration = parseFloat(metadata.format.duration);
+    const streamInfo = extractStreamInfo(metadata);
 
     const talkingRanges = calculateTalkingRanges(silenceRanges, inputDuration);
     const stats = calculateDurationStats(silenceRanges, inputDuration);
@@ -700,7 +732,7 @@ async function processVideo(inputFile, outputFile, silenceRanges, normalizeAudio
 
         event.reply('log', `🚀 Processing ${normalizeAudio ? '(pass 2/2) ' : ''}with filter_complex_script (${talkingRanges.length} segments)`);
 
-        await processVideoWithFilter(inputFile, outputFile, filterScriptPath, qualityPreset, stats.expectedOutputDuration, gopSize, event, useHardwareEncoder);
+        await processVideoWithFilter(inputFile, outputFile, filterScriptPath, qualityPreset, stats.expectedOutputDuration, gopSize, event, useHardwareEncoder, streamInfo);
 
         event.reply('log', `✅ Video processing completed successfully`);
     } finally {
