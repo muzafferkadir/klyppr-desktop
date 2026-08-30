@@ -10,13 +10,16 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "title": "Klyppr",
         "width": 1160,
         "height": 620,
         "minWidth": 720,
-        "minHeight": 520
+        "minHeight": 520,
+        "transparent": true,
+        "titleBarStyle": "Overlay"
       }
     ],
     "security": {

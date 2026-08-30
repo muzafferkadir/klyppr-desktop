@@ -40,6 +40,13 @@ export interface MediaInfo {
   audios: unknown[]
 }
 
+export interface EncoderInfo {
+  available: boolean
+  name: string
+  description: string
+}
+
+export const getEncoderInfo = () => invoke<EncoderInfo>('get_encoder_info')
 export const startJob = (request: JobRequest) => invoke<string>('start_job', { request })
 export const cancelJob = (jobId: string) => invoke<boolean>('cancel_job', { jobId })
 export const probeMedia = (inputPath: string) => invoke<MediaInfo>('probe_media', { inputPath })

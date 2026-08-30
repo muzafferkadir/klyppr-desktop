@@ -90,6 +90,32 @@ fn cancel_job(state: State<'_, AppState>, job_id: JobId) -> bool {
     state.jobs.cancel(&job_id)
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EncoderInfo {
+    available: bool,
+    name: String,
+    description: String,
+}
+
+/// Detect (cached) the hardware encoder for the UI's GPU toggle.
+#[tauri::command]
+async fn get_encoder_info(app: AppHandle, state: State<'_, AppState>) -> Result<EncoderInfo, AppErrorDto> {
+    let app_for_hw = app.clone();
+    let hw = *state
+        .hw
+        .get_or_init(|| async move { ffmpeg::capability::detect_hw_encoder(&app_for_hw).await })
+        .await;
+    let info = match hw {
+        Some(HwEncoder::VideoToolbox) => EncoderInfo { available: true, name: "VideoToolbox".into(), description: "Apple GPU hardware encoding".into() },
+        Some(HwEncoder::Nvenc) => EncoderInfo { available: true, name: "NVENC".into(), description: "NVIDIA GPU hardware encoding".into() },
+        Some(HwEncoder::Qsv) => EncoderInfo { available: true, name: "Quick Sync".into(), description: "Intel GPU hardware encoding".into() },
+        Some(HwEncoder::Amf) => EncoderInfo { available: true, name: "AMF".into(), description: "AMD GPU hardware encoding".into() },
+        None => EncoderInfo { available: false, name: String::new(), description: String::new() },
+    };
+    Ok(info)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -99,6 +125,15 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(AppState::default())
         .setup(|app| {
+            // Native macOS translucency behind the transparent window.
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::Manager;
+                use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = apply_vibrancy(&win, NSVisualEffectMaterial::UnderWindowBackground, None, None);
+                }
+            }
             // Proactively provision ffmpeg on launch so the first job is instant.
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -111,7 +146,8 @@ pub fn run() {
             ffprobe_version,
             probe_media,
             start_job,
-            cancel_job
+            cancel_job,
+            get_encoder_info
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -3,8 +3,8 @@
   "ffmpeg_version": "9.x",
   "targets": {
     "aarch64-apple-darwin": {
-      "ffmpeg": { "url": "https://www.osxexperts.net/ffmpeg9arm.zip", "member": "ffmpeg", "sha256": "TODO" },
-      "ffprobe": { "url": "https://www.osxexperts.net/ffprobe9arm.zip", "member": "ffprobe", "sha256": "TODO" }
+      "ffmpeg": { "url": "https://www.osxexperts.net/ffmpeg9arm.zip", "member": "ffmpeg", "sha256": "b945ee8012107af82eea1c1d06d65a2ab3eca9f5ccfc318822f3fc6bafb30d29" },
+      "ffprobe": { "url": "https://www.osxexperts.net/ffprobe9arm.zip", "member": "ffprobe", "sha256": "a05c9dc45040a1502483a48ddcbcf85422f4de455448d6fcbef51e5b2c9c1585" }
     },
     "x86_64-apple-darwin": {
       "ffmpeg": { "url": "https://evermeet.cx/ffmpeg/ffmpeg-9.0.1.zip", "member": "ffmpeg", "sha256": "TODO" },
