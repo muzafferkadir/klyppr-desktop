@@ -1,0 +1,89 @@
+{
+  "name": "klyppr-desktop",
+  "version": "2.0.0",
+  "description": "Desktop version of Klyppr video editor",
+  "main": "main.js",
+  "scripts": {
+    "start": "cross-env NODE_ENV=development electron .",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:win32": "electron-builder --win --ia32",
+    "build:win64": "electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.klyppr.app",
+    "productName": "Klyppr",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!videos/*",
+      "!dist/*",
+      "!build/*"
+    ],
+    "mac": {
+      "category": "public.app-category.video",
+      "target": [
+        "dmg"
+      ],
+      "icon": "public/logo.png",
+      "extraResources": [
+        {
+          "from": "bin/mac/ffmpeg",
+          "to": "bin/ffmpeg"
+        },
+        {
+          "from": "bin/mac/ffprobe",
+          "to": "bin/ffprobe"
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "public/logo.png",
+      "extraResources": [
+        {
+          "from": "bin/win/ffmpeg.exe",
+          "to": "bin/ffmpeg.exe"
+        },
+        {
+          "from": "bin/win/ffprobe.exe",
+          "to": "bin/ffprobe.exe"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "perMachine": true,
+      "artifactName": "Klyppr-Setup-${arch}.${ext}"
+    },
+    "dmg": {
+      "artifactName": "Klyppr-mac-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Klyppr-Portable-${arch}.exe"
+    }
+  },
+  "keywords": [
+    "video",
+    "editor",
+    "silence",
+    "ffmpeg"
+  ],
+  "author": "Muzaffer Kadir YILMAZ",
+  "license": "MIT",
+  "dependencies": {
+    "fs-extra": "^11.3.0"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^40.4.1",
+    "electron-builder": "^26.7.0"
+  }
+}

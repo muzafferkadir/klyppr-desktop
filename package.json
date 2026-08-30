@@ -1,89 +1,27 @@
 {
-  "name": "klyppr-desktop",
-  "version": "2.0.0",
-  "description": "Desktop version of Klyppr video editor",
-  "main": "main.js",
+  "name": "klyppr",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
   "scripts": {
-    "start": "cross-env NODE_ENV=development electron .",
-    "build": "electron-builder",
-    "build:mac": "electron-builder --mac",
-    "build:win32": "electron-builder --win --ia32",
-    "build:win64": "electron-builder --win --x64"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
+    "tauri": "tauri"
   },
-  "build": {
-    "appId": "com.klyppr.app",
-    "productName": "Klyppr",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "**/*",
-      "!videos/*",
-      "!dist/*",
-      "!build/*"
-    ],
-    "mac": {
-      "category": "public.app-category.video",
-      "target": [
-        "dmg"
-      ],
-      "icon": "public/logo.png",
-      "extraResources": [
-        {
-          "from": "bin/mac/ffmpeg",
-          "to": "bin/ffmpeg"
-        },
-        {
-          "from": "bin/mac/ffprobe",
-          "to": "bin/ffprobe"
-        }
-      ]
-    },
-    "win": {
-      "target": [
-        "nsis"
-      ],
-      "icon": "public/logo.png",
-      "extraResources": [
-        {
-          "from": "bin/win/ffmpeg.exe",
-          "to": "bin/ffmpeg.exe"
-        },
-        {
-          "from": "bin/win/ffprobe.exe",
-          "to": "bin/ffprobe.exe"
-        }
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "perMachine": true,
-      "artifactName": "Klyppr-Setup-${arch}.${ext}"
-    },
-    "dmg": {
-      "artifactName": "Klyppr-mac-${arch}.${ext}"
-    },
-    "portable": {
-      "artifactName": "Klyppr-Portable-${arch}.exe"
-    }
-  },
-  "keywords": [
-    "video",
-    "editor",
-    "silence",
-    "ffmpeg"
-  ],
-  "author": "Muzaffer Kadir YILMAZ",
-  "license": "MIT",
   "dependencies": {
-    "fs-extra": "^11.3.0"
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-opener": "^2"
   },
   "devDependencies": {
-    "cross-env": "^7.0.3",
-    "electron": "^40.4.1",
-    "electron-builder": "^26.7.0"
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
+    "@tauri-apps/cli": "^2",
+    "@tsconfig/svelte": "^5.0.8",
+    "@types/node": "^24.13.3",
+    "svelte": "^5.56.10",
+    "svelte-check": "^4.7.6",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.2"
   }
 }
