@@ -5,6 +5,7 @@
   import JobProgress from './components/JobProgress.svelte'
   import LogPanel from './components/LogPanel.svelte'
   import CompletionDialog from './components/CompletionDialog.svelte'
+  import UpdateBanner from './components/UpdateBanner.svelte'
   import { job, run, initJobEvents } from './lib/job.svelte'
   import type { Settings } from './lib/tauri'
 
@@ -42,6 +43,7 @@
   </header>
 
   <section class="content">
+    <UpdateBanner />
     <FilePicker bind:inputPath bind:outputDir />
     <ProcessingSettings bind:settings disabled={job.running} />
 
