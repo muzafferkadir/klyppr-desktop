@@ -77,6 +77,11 @@ pub struct JobRequest {
     pub normalize_audio: bool,
     pub quality: QualityPreset,
     pub use_hardware: bool,
+    /// Editor-provided silence spans (seconds) to cut. When present, the backend
+    /// skips its own silencedetect and uses these — so the preview and output
+    /// match exactly. `None` → automatic detection (the plain "Start" flow).
+    #[serde(default)]
+    pub silence_ranges: Option<Vec<[f64; 2]>>,
 }
 
 #[cfg(test)]

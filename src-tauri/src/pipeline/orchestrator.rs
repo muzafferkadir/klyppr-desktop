@@ -112,17 +112,28 @@ async fn pipeline_body(
         fmt_dur(media.duration), video.width, video.height, fps.as_f64()
     ));
 
-    phase(app, job_id, Phase::Detect);
-    log(app, job_id, LogLevel::Info, "Analyzing audio for silence…");
-    let silences = silence::detect_silence(
-        app,
-        &request.input_path,
-        request.silence_db,
-        request.min_silence,
-        media.duration,
-    )
-    .await?;
-    bail_if_cancelled(token)?;
+    // Editor supplies the cut ranges directly (preview == output); otherwise we
+    // detect them ourselves (the plain Start flow).
+    let silences = match &request.silence_ranges {
+        Some(ranges) => {
+            log(app, job_id, LogLevel::Info, format!("Using {} cut range(s) from the editor", ranges.len()));
+            ranges.iter().map(|r| silence::SilenceRange { start: r[0], end: r[1] }).collect()
+        }
+        None => {
+            phase(app, job_id, Phase::Detect);
+            log(app, job_id, LogLevel::Info, "Analyzing audio for silence…");
+            let s = silence::detect_silence(
+                app,
+                &request.input_path,
+                request.silence_db,
+                request.min_silence,
+                media.duration,
+            )
+            .await?;
+            bail_if_cancelled(token)?;
+            s
+        }
+    };
 
     let removed_raw: f64 = silences.iter().map(|s| s.end - s.start).sum();
     log(app, job_id, LogLevel::Info, format!(
@@ -132,7 +143,10 @@ async fn pipeline_body(
         log(app, job_id, LogLevel::Info, format!("  ✂ {} → {}", fmt_ts(s.start), fmt_ts(s.end)));
     }
 
-    let segments = timeline::build_timeline(&silences, media.duration, request.padding, fps);
+    // Editor ranges already include padding (computed client-side); don't apply
+    // it again. Auto-detected ranges get the requested padding.
+    let padding = if request.silence_ranges.is_some() { 0.0 } else { request.padding };
+    let segments = timeline::build_timeline(&silences, media.duration, padding, fps);
     if segments.is_empty() {
         return Err(AppError::UnsupportedMedia(
             "no speech segments remain (whole clip is silence?)".into(),

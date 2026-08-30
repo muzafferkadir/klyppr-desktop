@@ -12,7 +12,18 @@ export interface JobRequest {
   normalizeAudio: boolean
   quality: QualityPreset
   useHardware: boolean
+  /** Editor cut ranges (seconds). When set, backend skips its own detection. */
+  silenceRanges?: [number, number][]
 }
+
+export interface AudioAnalysis {
+  duration: number
+  bucketMs: number
+  peaks: number[]
+  envelopeDb: number[]
+}
+
+export const analyzeAudio = (inputPath: string) => invoke<AudioAnalysis>('analyze_audio', { inputPath })
 
 /** The user-tunable subset of a job (everything except the paths). */
 export type Settings = Omit<JobRequest, 'inputPath' | 'outputDir'>
