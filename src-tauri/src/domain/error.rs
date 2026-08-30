@@ -14,9 +14,6 @@ pub enum AppError {
     #[error("unsupported media: {0}")]
     UnsupportedMedia(String),
 
-    #[error("ffmpeg sidecar missing: {0}")]
-    SidecarMissing(String),
-
     #[error("ffmpeg failed to spawn: {0}")]
     SidecarSpawn(String),
 
@@ -58,7 +55,6 @@ impl AppError {
             AppError::InputValidation(_) => "inputValidation",
             AppError::Probe(_) => "probe",
             AppError::UnsupportedMedia(_) => "unsupportedMedia",
-            AppError::SidecarMissing(_) => "sidecarMissing",
             AppError::SidecarSpawn(_) => "sidecarSpawn",
             AppError::FfmpegExit { .. } => "ffmpegExit",
             AppError::FilterGraph(_) => "filterGraph",

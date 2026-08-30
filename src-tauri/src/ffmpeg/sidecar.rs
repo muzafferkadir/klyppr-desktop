@@ -1,7 +1,10 @@
+use std::path::Path;
+
 use tauri::AppHandle;
-use tauri_plugin_shell::ShellExt;
+use tokio::process::Command;
 
 use crate::domain::error::{AppError, AppResult};
+use crate::ffmpeg::provision::{ffmpeg_path, ffprobe_path};
 
 /// Keep the last few stderr lines for error messages (ffmpeg puts the real
 /// reason at the very end).
@@ -12,18 +15,14 @@ fn stderr_tail(stderr: &[u8]) -> String {
     lines[start..].join(" | ")
 }
 
-/// Run a bundled sidecar to completion and return stdout as UTF-8. Used for
-/// short, buffered calls (ffprobe, `-version`). Streaming encode/detect calls
-/// live in the pipeline runner, not here.
-async fn run_capture(app: &AppHandle, bin: &str, args: &[&str]) -> AppResult<String> {
-    let output = app
-        .shell()
-        .sidecar(bin)
-        .map_err(|e| AppError::SidecarMissing(format!("{bin}: {e}")))?
+/// Run a provisioned binary to completion, returning stdout. Used for short,
+/// buffered calls (ffprobe, `-version`).
+async fn run_capture_stdout(bin: &Path, args: &[&str]) -> AppResult<String> {
+    let output = Command::new(bin)
         .args(args)
         .output()
         .await
-        .map_err(|e| AppError::SidecarSpawn(format!("{bin}: {e}")))?;
+        .map_err(|e| AppError::SidecarSpawn(format!("{}: {e}", bin.display())))?;
 
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).into_owned())
@@ -37,17 +36,13 @@ async fn run_capture(app: &AppHandle, bin: &str, args: &[&str]) -> AppResult<Str
 
 /// Run ffprobe with the given args, capturing stdout.
 pub async fn ffprobe(app: &AppHandle, args: &[&str]) -> AppResult<String> {
-    run_capture(app, "ffprobe", args).await
+    run_capture_stdout(&ffprobe_path(app)?, args).await
 }
 
-/// Run ffmpeg to completion and return its STDERR. ffmpeg writes analysis
-/// output (silencedetect, loudnorm json) to stderr, and `-f null -` runs exit
-/// 0, so success returns stderr; failure surfaces the tail as an error.
+/// Run ffmpeg to completion and return its STDERR (silencedetect, loudnorm json,
+/// and `-f null -` all report there and exit 0 on success).
 pub async fn ffmpeg_stderr(app: &AppHandle, args: &[&str]) -> AppResult<String> {
-    let output = app
-        .shell()
-        .sidecar("ffmpeg")
-        .map_err(|e| AppError::SidecarMissing(format!("ffmpeg: {e}")))?
+    let output = Command::new(ffmpeg_path(app)?)
         .args(args)
         .output()
         .await
@@ -63,8 +58,8 @@ pub async fn ffmpeg_stderr(app: &AppHandle, args: &[&str]) -> AppResult<String> 
     }
 }
 
-/// First line of `ffprobe -version` — a startup smoke test that the bundled
-/// sidecar is present, signed, and runnable.
+/// First line of `ffprobe -version` — a smoke test that the provisioned binary
+/// is present and runnable.
 pub async fn ffprobe_version(app: &AppHandle) -> AppResult<String> {
     let out = ffprobe(app, &["-version"]).await?;
     Ok(out.lines().next().unwrap_or("").to_string())

@@ -1,11 +1,13 @@
 use std::collections::VecDeque;
+use std::process::Stdio;
 
 use tauri::AppHandle;
-use tauri_plugin_shell::process::CommandEvent;
-use tauri_plugin_shell::ShellExt;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
 
 use crate::domain::error::{AppError, AppResult};
+use crate::ffmpeg::provision::ffmpeg_path;
 use crate::pipeline::output_plan::OutputPlan;
 
 /// Assemble the ffmpeg argument list for the cut+concat encode. CFR is forced
@@ -98,68 +100,61 @@ pub async fn run_encode(
     on_progress: &(dyn Fn(f64) + Send + Sync),
     on_log: &(dyn Fn(&str) + Send + Sync),
 ) -> AppResult<()> {
-    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    let (mut rx, child) = app
-        .shell()
-        .sidecar("ffmpeg")
-        .map_err(|e| AppError::SidecarMissing(format!("ffmpeg: {e}")))?
-        .args(arg_refs)
+    let mut child = Command::new(ffmpeg_path(app)?)
+        .args(&args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| AppError::SidecarSpawn(format!("ffmpeg: {e}")))?;
 
-    let mut child = Some(child);
+    let mut out = BufReader::new(child.stdout.take().unwrap()).lines();
+    let mut err = BufReader::new(child.stderr.take().unwrap()).lines();
+    let mut out_open = true;
+    let mut err_open = true;
     let mut tail: VecDeque<String> = VecDeque::with_capacity(4);
 
+    // Read stdout (progress) and stderr (logs) until both pipes close, then reap.
     loop {
         tokio::select! {
             _ = token.cancelled() => {
-                if let Some(c) = child.take() {
-                    let _ = c.kill();
-                }
-                // Drain to the process's exit so it's fully reaped.
-                while let Some(ev) = rx.recv().await {
-                    if matches!(ev, CommandEvent::Terminated(_)) {
-                        break;
-                    }
-                }
+                let _ = child.kill().await;
                 return Err(AppError::Cancelled);
             }
-            event = rx.recv() => match event {
-                Some(CommandEvent::Stdout(bytes)) => {
-                    let line = String::from_utf8_lossy(&bytes);
-                    if let Some(frac) = parse_progress(line.trim(), expected_duration) {
+            line = out.next_line(), if out_open => match line {
+                Ok(Some(l)) => {
+                    if let Some(frac) = parse_progress(l.trim(), expected_duration) {
                         on_progress(frac);
                     }
                 }
-                Some(CommandEvent::Stderr(bytes)) => {
-                    let line = String::from_utf8_lossy(&bytes).trim().to_string();
-                    if !line.is_empty() {
+                _ => out_open = false,
+            },
+            line = err.next_line(), if err_open => match line {
+                Ok(Some(l)) => {
+                    let l = l.trim().to_string();
+                    if !l.is_empty() {
                         if tail.len() == 3 {
                             tail.pop_front();
                         }
-                        tail.push_back(line.clone());
-                        on_log(&line);
+                        tail.push_back(l.clone());
+                        on_log(&l);
                     }
                 }
-                Some(CommandEvent::Terminated(payload)) => {
-                    return if payload.code == Some(0) {
-                        Ok(())
-                    } else {
-                        Err(AppError::FfmpegExit {
-                            code: payload.code,
-                            stderr_tail: tail.iter().cloned().collect::<Vec<_>>().join(" | "),
-                        })
-                    };
-                }
-                Some(_) => {}
-                None => {
-                    return Err(AppError::FfmpegExit {
-                        code: None,
-                        stderr_tail: "ffmpeg stream closed without a termination event".into(),
-                    });
-                }
-            }
+                _ => err_open = false,
+            },
         }
+        if !out_open && !err_open {
+            break;
+        }
+    }
+
+    let status = child.wait().await.map_err(|e| AppError::Io(e.to_string()))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(AppError::FfmpegExit {
+            code: status.code(),
+            stderr_tail: tail.iter().cloned().collect::<Vec<_>>().join(" | "),
+        })
     }
 }
 
