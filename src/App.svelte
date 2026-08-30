@@ -1,89 +1,63 @@
-<script>
-  import svelteLogo from './assets/svelte.svg'
-  import viteLogo from './assets/vite.svg'
-  import heroImg from './assets/hero.png'
-  import Counter from './lib/Counter.svelte'
+<script lang="ts">
+  import { invoke } from '@tauri-apps/api/core'
+
+  // Temporary skeleton screen: only verifies the ffprobe sidecar is wired up.
+  // Replaced by the real UI (FilePicker, settings, progress…) in a later step.
+  let result = $state('')
+  let busy = $state(false)
+
+  async function testSidecar() {
+    busy = true
+    result = ''
+    try {
+      result = await invoke<string>('ffprobe_version')
+    } catch (e) {
+      result = `ERROR: ${e}`
+    } finally {
+      busy = false
+    }
+  }
 </script>
 
-<section id="center">
-  <div class="hero">
-    <img src={heroImg} class="base" width="170" height="179" alt="" />
-    <img src={svelteLogo} class="framework" alt="Svelte logo" />
-    <img src={viteLogo} class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/App.svelte</code> and save to test <code>HMR</code></p>
-  </div>
-  <Counter />
-</section>
+<main>
+  <h1>Klyppr</h1>
+  <p class="sub">Tauri + Svelte skeleton — sidecar smoke test</p>
 
-<div class="ticks"></div>
+  <button onclick={testSidecar} disabled={busy}>
+    {busy ? 'Running…' : 'Test ffprobe sidecar'}
+  </button>
 
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true">
-      <use href="/icons.svg#documentation-icon"></use>
-    </svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank" rel="noreferrer">
-          <img class="logo" src={viteLogo} alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://svelte.dev/" target="_blank" rel="noreferrer">
-          <img class="button-icon" src={svelteLogo} alt="" />
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true">
-      <use href="/icons.svg#social-icon"></use>
-    </svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li>
-        <a href="https://github.com/vitejs/vite" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#github-icon"></use>
-          </svg>
-          GitHub
-        </a>
-      </li>
-      <li>
-        <a href="https://chat.vite.dev/" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#discord-icon"></use>
-          </svg>
-          Discord
-        </a>
-      </li>
-      <li>
-        <a href="https://x.com/vite_js" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#x-icon"></use>
-          </svg>
-          X.com
-        </a>
-      </li>
-      <li>
-        <a href="https://bsky.app/profile/vite.dev" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#bluesky-icon"></use>
-          </svg>
-          Bluesky
-        </a>
-      </li>
-    </ul>
-  </div>
-</section>
+  {#if result}
+    <pre class:error={result.startsWith('ERROR')}>{result}</pre>
+  {/if}
+</main>
 
-<div class="ticks"></div>
-<section id="spacer"></section>
+<style>
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem;
+    text-align: center;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  h1 { margin: 0 0 0.25rem; font-size: 2.5rem; }
+  .sub { margin: 0 0 2rem; opacity: 0.6; }
+  button {
+    padding: 0.7rem 1.4rem;
+    font-size: 1rem;
+    border-radius: 8px;
+    border: 1px solid rgba(128, 128, 128, 0.4);
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  pre {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    text-align: left;
+    background: rgba(128, 128, 128, 0.12);
+    border-radius: 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  pre.error { color: #e5484d; }
+</style>

@@ -1,0 +1,4 @@
+# Sidecar binaries are fetched (scripts/fetch-sidecars) or copied locally, not committed.
+*-apple-darwin
+*-pc-windows-msvc.exe
+!.gitignore

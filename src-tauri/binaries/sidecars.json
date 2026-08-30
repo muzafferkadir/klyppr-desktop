@@ -1,0 +1,27 @@
+{
+  "_comment": "Pinned FFmpeg/ffprobe sidecar builds. The app NEVER uses system ffmpeg. fetch-sidecars (scripts/, added in the packaging step) downloads these exact files, verifies sha256 against the UNSIGNED source, then ad-hoc signs them for macOS. Bump ffmpeg_version + checksums together, in one commit.",
+  "ffmpeg_version": "9.0",
+  "targets": {
+    "aarch64-apple-darwin": {
+      "builder": "martin-riedl.de (static, gpl, version3)",
+      "source": "https://www.martin-riedl.de/ffmpeg/",
+      "ffmpeg_sha256": "f54ec33409c78f54564c80afa16213b0970065100a87f4129516be0c8660c493",
+      "ffprobe_sha256": "f7142685d6e692ac22fde47facf8c078ce5333512e3ccfa4b83225d0561ad428",
+      "status": "in-use (currently the only bundled target)"
+    },
+    "x86_64-apple-darwin": {
+      "builder": "martin-riedl.de (static, gpl, version3)",
+      "source": "https://www.martin-riedl.de/ffmpeg/",
+      "ffmpeg_sha256": "TODO",
+      "ffprobe_sha256": "TODO",
+      "status": "pending — Intel mac build, pin when CI matrix is set up"
+    },
+    "x86_64-pc-windows-msvc": {
+      "builder": "BtbN or gyan.dev (win64-gpl, must match ffmpeg 9.0)",
+      "source": "https://github.com/BtbN/FFmpeg-Builds/releases",
+      "ffmpeg_sha256": "TODO",
+      "ffprobe_sha256": "TODO",
+      "status": "pending — Windows build, pin when CI matrix is set up"
+    }
+  }
+}
