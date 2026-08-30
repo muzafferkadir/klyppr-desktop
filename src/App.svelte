@@ -1,63 +1,105 @@
 <script lang="ts">
-  import { invoke } from '@tauri-apps/api/core'
+  import { onMount } from 'svelte'
+  import FilePicker from './components/FilePicker.svelte'
+  import ProcessingSettings from './components/ProcessingSettings.svelte'
+  import JobProgress from './components/JobProgress.svelte'
+  import LogPanel from './components/LogPanel.svelte'
+  import CompletionDialog from './components/CompletionDialog.svelte'
+  import { job, run, initJobEvents } from './lib/job.svelte'
+  import type { Settings } from './lib/tauri'
 
-  // Temporary skeleton screen: only verifies the ffprobe sidecar is wired up.
-  // Replaced by the real UI (FilePicker, settings, progress…) in a later step.
-  let result = $state('')
-  let busy = $state(false)
+  let inputPath = $state('')
+  let outputDir = $state('')
+  let settings = $state<Settings>({
+    silenceDb: -30,
+    minSilence: 0.5,
+    padding: 0.05,
+    quality: 'medium',
+    normalizeAudio: true,
+    useHardware: true,
+  })
+  let showDialog = $state(false)
 
-  async function testSidecar() {
-    busy = true
-    result = ''
-    try {
-      result = await invoke<string>('ffprobe_version')
-    } catch (e) {
-      result = `ERROR: ${e}`
-    } finally {
-      busy = false
-    }
+  const canStart = $derived(!!inputPath && !!outputDir && !job.running)
+
+  onMount(initJobEvents)
+
+  // Surface the completion dialog whenever a job produces a result.
+  $effect(() => {
+    if (job.result) showDialog = true
+  })
+
+  function start() {
+    showDialog = false
+    run({ inputPath, outputDir, ...settings })
   }
 </script>
 
 <main>
-  <h1>Klyppr</h1>
-  <p class="sub">Tauri + Svelte skeleton — sidecar smoke test</p>
+  <header data-tauri-drag-region>
+    <h1>Klyppr</h1>
+    <p>Cut silence from video, keep it in sync.</p>
+  </header>
 
-  <button onclick={testSidecar} disabled={busy}>
-    {busy ? 'Running…' : 'Test ffprobe sidecar'}
-  </button>
+  <section class="content">
+    <FilePicker bind:inputPath bind:outputDir />
+    <ProcessingSettings bind:settings disabled={job.running} />
 
-  {#if result}
-    <pre class:error={result.startsWith('ERROR')}>{result}</pre>
-  {/if}
+    {#if job.running}
+      <JobProgress />
+    {:else}
+      <button class="start" onclick={start} disabled={!canStart}>Start</button>
+    {/if}
+
+    <LogPanel />
+  </section>
 </main>
+
+{#if showDialog}
+  <CompletionDialog onDismiss={() => (showDialog = false)} />
+{/if}
 
 <style>
   main {
     max-width: 640px;
     margin: 0 auto;
-    padding: 3rem 1.5rem;
+    padding: var(--sp-5) var(--sp-5) var(--sp-6);
+  }
+  header {
+    padding: var(--sp-4) 0 var(--sp-5);
     text-align: center;
-    font-family: system-ui, -apple-system, sans-serif;
   }
-  h1 { margin: 0 0 0.25rem; font-size: 2.5rem; }
-  .sub { margin: 0 0 2rem; opacity: 0.6; }
-  button {
-    padding: 0.7rem 1.4rem;
-    font-size: 1rem;
-    border-radius: 8px;
-    border: 1px solid rgba(128, 128, 128, 0.4);
+  header h1 {
+    margin: 0;
+    font-size: 28px;
+    letter-spacing: -0.02em;
+  }
+  header p {
+    margin: 4px 0 0;
+    color: var(--text-muted);
+  }
+  .content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+  }
+  .start {
+    padding: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--accent-contrast);
+    background: var(--accent);
+    border: none;
+    border-radius: var(--r-md);
     cursor: pointer;
+    box-shadow: var(--shadow-1);
+    transition: background 0.15s;
   }
-  button:disabled { opacity: 0.5; cursor: default; }
-  pre {
-    margin-top: 1.5rem;
-    padding: 1rem;
-    text-align: left;
-    background: rgba(128, 128, 128, 0.12);
-    border-radius: 8px;
-    white-space: pre-wrap;
-    word-break: break-word;
+  .start:hover:not(:disabled) {
+    background: var(--accent-hover);
   }
-  pre.error { color: #e5484d; }
+  .start:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
 </style>

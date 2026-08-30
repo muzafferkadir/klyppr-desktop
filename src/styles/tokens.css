@@ -1,0 +1,90 @@
+/* Design tokens — one source of truth for color, space, radius, type.
+   Light palette on :root; dark overrides under prefers-color-scheme. */
+
+:root {
+  /* Surfaces */
+  --bg: #f4f4f6;
+  --surface: #ffffff;
+  --surface-2: #f0f0f3;
+  --border: #e2e2e8;
+  --border-strong: #d0d0d8;
+
+  /* Text */
+  --text: #1c1c22;
+  --text-muted: #6b6b78;
+  --text-faint: #9a9aa6;
+
+  /* Accent (Klyppr) */
+  --accent: #5b5bd6;
+  --accent-hover: #4a4ac0;
+  --accent-contrast: #ffffff;
+
+  /* Status */
+  --success: #2f9e44;
+  --danger: #e5484d;
+  --warn: #e08a00;
+
+  /* Elevation */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.1);
+
+  /* Space scale */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  /* Radius */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Menlo", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1f;
+    --surface: #26262b;
+    --surface-2: #2d2d33;
+    --border: #35353c;
+    --border-strong: #45454e;
+
+    --text: #ececf0;
+    --text-muted: #a0a0ac;
+    --text-faint: #70707c;
+
+    --accent: #7c7cf0;
+    --accent-hover: #8f8ff5;
+    --accent-contrast: #16161a;
+
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-2: 0 6px 20px rgba(0, 0, 0, 0.4);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+}
