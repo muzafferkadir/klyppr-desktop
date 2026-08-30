@@ -64,3 +64,21 @@ pub async fn ffprobe_version(app: &AppHandle) -> AppResult<String> {
     let out = ffprobe(app, &["-version"]).await?;
     Ok(out.lines().next().unwrap_or("").to_string())
 }
+
+/// Run ffmpeg and return raw STDOUT bytes (for binary output like PCM).
+pub async fn ffmpeg_stdout_bytes(app: &AppHandle, args: &[&str]) -> AppResult<Vec<u8>> {
+    let output = Command::new(ffmpeg_path(app)?)
+        .args(args)
+        .output()
+        .await
+        .map_err(|e| AppError::SidecarSpawn(format!("ffmpeg: {e}")))?;
+
+    if output.status.success() {
+        Ok(output.stdout)
+    } else {
+        Err(AppError::FfmpegExit {
+            code: output.status.code(),
+            stderr_tail: stderr_tail(&output.stderr),
+        })
+    }
+}

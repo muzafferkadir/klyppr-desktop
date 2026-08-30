@@ -43,6 +43,19 @@ async fn probe_media(app: AppHandle, input_path: String) -> Result<MediaInfo, Ap
     pipeline::probe::probe(&app, &input_path).await.map_err(|e| e.to_dto())
 }
 
+/// Decode audio into per-bucket peaks + loudness envelope for the editor timeline.
+#[tauri::command]
+async fn analyze_audio(
+    app: AppHandle,
+    input_path: String,
+) -> Result<pipeline::analyze::AudioAnalysis, AppErrorDto> {
+    ffmpeg::provision::ensure_ffmpeg(&app).await.map_err(|e| e.to_dto())?;
+    let media = pipeline::probe::probe(&app, &input_path).await.map_err(|e| e.to_dto())?;
+    pipeline::analyze::analyze_audio(&app, &input_path, media.duration)
+        .await
+        .map_err(|e| e.to_dto())
+}
+
 /// Start processing. Returns a JobId immediately and runs the pipeline in the
 /// background, emitting `job-event`s. Rejects if a job is already running.
 #[tauri::command]
@@ -148,6 +161,7 @@ pub fn run() {
             ensure_ffmpeg,
             ffprobe_version,
             probe_media,
+            analyze_audio,
             start_job,
             cancel_job,
             get_encoder_info

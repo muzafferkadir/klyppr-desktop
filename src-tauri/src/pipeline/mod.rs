@@ -1,3 +1,4 @@
+pub mod analyze;
 pub mod encode;
 pub mod filtergraph;
 pub mod loudnorm;
