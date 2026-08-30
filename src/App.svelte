@@ -234,7 +234,7 @@
           bind:outputPath
           {analysis}
           {encoder}
-          onReset={resetVideo}
+          onLoadVideo={loadVideo}
           bind:silenceDb
           bind:minSilence
           bind:padding
@@ -475,7 +475,7 @@
   }
   .update-bar button:disabled { opacity: 0.6; }
 
-  .main-content.editing { padding: 0; }
+  .main-content.editing { padding: 0; overflow: hidden; }
   .analyzing {
     flex: 1;
     display: flex;
