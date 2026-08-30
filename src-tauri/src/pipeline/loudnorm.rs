@@ -102,8 +102,18 @@ pub fn parse_loudnorm_json(stderr: &str) -> Option<LoudnormStats> {
     }
     let json: serde_json::Value = serde_json::from_str(&stderr[open..=close]).ok()?;
     let get = |k: &str| json.get(k).and_then(|v| v.as_str()).map(str::to_string);
+    let input_i = get("input_i")?;
+
+    // Near-silent / empty audio measures as -inf (or absurdly low). Two-pass
+    // linear mode with that measurement produces broken gain, so treat it as
+    // "no usable measurement" and fall back to single-pass.
+    match input_i.parse::<f64>() {
+        Ok(v) if v.is_finite() && v > -70.0 => {}
+        _ => return None,
+    }
+
     Some(LoudnormStats {
-        input_i: get("input_i")?,
+        input_i,
         input_tp: get("input_tp")?,
         input_lra: get("input_lra")?,
         input_thresh: get("input_thresh")?,
@@ -142,5 +152,11 @@ mod tests {
         let s = parse_loudnorm_json(stderr).unwrap();
         assert_eq!(s.input_i, "-19.0");
         assert_eq!(s.target_offset, "0.5");
+    }
+
+    #[test]
+    fn rejects_silent_input_measurement() {
+        let stderr = "{\n  \"input_i\": \"-inf\",\n  \"input_tp\": \"-inf\",\n  \"input_lra\": \"0.0\",\n  \"input_thresh\": \"-inf\",\n  \"target_offset\": \"0.0\"\n}";
+        assert!(parse_loudnorm_json(stderr).is_none());
     }
 }

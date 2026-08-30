@@ -41,7 +41,7 @@ pub enum LogLevel {
 /// The single event type emitted to the frontend (`serde` tagged union →
 /// TS discriminated union). One channel, one shape.
 #[derive(Debug, Clone, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum JobEvent {
     Phase { job_id: JobId, phase: Phase },
     Progress { job_id: JobId, fraction: f64 },
@@ -76,4 +76,31 @@ pub struct JobRequest {
     pub normalize_audio: bool,
     pub quality: QualityPreset,
     pub use_hardware: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn event_fields_serialize_camel_case() {
+        let ev = JobEvent::Progress {
+            job_id: JobId("abc".into()),
+            fraction: 0.5,
+        };
+        let json = serde_json::to_string(&ev).unwrap();
+        assert!(json.contains("\"kind\":\"progress\""));
+        assert!(json.contains("\"jobId\":\"abc\""), "got {json}");
+        assert!(!json.contains("job_id"));
+    }
+
+    #[test]
+    fn finished_uses_output_path_camel_case() {
+        let ev = JobEvent::Finished {
+            job_id: JobId("x".into()),
+            output_path: "/tmp/o.mp4".into(),
+        };
+        let json = serde_json::to_string(&ev).unwrap();
+        assert!(json.contains("\"outputPath\":\"/tmp/o.mp4\""), "got {json}");
+    }
 }

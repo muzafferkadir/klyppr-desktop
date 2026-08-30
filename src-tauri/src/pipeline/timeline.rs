@@ -49,7 +49,7 @@ pub fn build_timeline(
         .filter(|s| s.end - s.start > MIN_SEGMENT_SECS)
         .collect();
 
-    padded.sort_by(|a, b| a.start.partial_cmp(&b.start).unwrap());
+    padded.sort_by(|a, b| a.start.total_cmp(&b.start));
     let merged = merge_overlaps(padded);
 
     // Complement: speech is everything between the silences.
@@ -83,11 +83,13 @@ fn complement(silences: &[SilenceRange], duration: f64) -> Vec<(f64, f64)> {
     let mut talking = Vec::new();
     let mut cursor = 0.0_f64;
     for s in silences {
-        let start = s.start.max(0.0);
+        // Clamp to [0, duration] so a silence that runs past the end can't push
+        // a talking span past duration and inflate the expected output length.
+        let start = s.start.clamp(0.0, duration);
         if start > cursor {
             talking.push((cursor, start));
         }
-        cursor = cursor.max(s.end);
+        cursor = cursor.max(s.end).min(duration);
     }
     if cursor < duration {
         talking.push((cursor, duration));

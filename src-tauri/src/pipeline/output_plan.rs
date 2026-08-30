@@ -235,9 +235,14 @@ fn build_audio_plan(
     };
 
     let src = media.audios.first();
+    // Keep the source bitrate when it's a sane value, else a safe default.
+    // A reported 0 (or absurdly high) would otherwise produce "0k" / a failing
+    // encode. Cap at 320k — well above transparent for AAC/Opus.
     let bitrate = src
         .and_then(|a| a.bit_rate)
-        .map(|b| format!("{}k", (b as f64 / 1000.0).round() as u32))
+        .filter(|&b| b > 0)
+        .map(|b| ((b as f64 / 1000.0).round() as u32).clamp(32, 320))
+        .map(|kbps| format!("{kbps}k"))
         .unwrap_or_else(|| "320k".to_string());
 
     let resample_hz = if normalize_audio {
