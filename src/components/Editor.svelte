@@ -3,6 +3,7 @@
   import { open } from '@tauri-apps/plugin-dialog'
   import { computeSilence, totalCut } from '../lib/silence'
   import { job, run, cancel } from '../lib/job.svelte'
+  import SettingsPanel from './SettingsPanel.svelte'
   import type { AudioAnalysis, EncoderInfo, QualityPreset } from '../lib/tauri'
 
   let {
@@ -30,8 +31,6 @@
     normalizeAudio: boolean
     useHardware: boolean
   } = $props()
-
-  const presets = ['fast', 'medium', 'high', 'lossless'] as const
 
   // Cuts recompute live from the loudness envelope as sliders move.
   const ranges = $derived(
@@ -91,22 +90,16 @@
     <aside class="panel">
       <button class="link" onclick={onReset}>← Choose another video</button>
 
-      <label class="fld"><span>Silence threshold <em>{silenceDb} dB</em></span>
-        <input type="range" min="-60" max="-10" step="1" bind:value={silenceDb} disabled={job.running} /></label>
-      <label class="fld"><span>Min. silence <em>{minSilence.toFixed(2)}s</em></span>
-        <input type="range" min="0.1" max="2" step="0.05" bind:value={minSilence} disabled={job.running} /></label>
-      <label class="fld"><span>Padding <em>{padding.toFixed(2)}s</em></span>
-        <input type="range" min="0" max="0.5" step="0.01" bind:value={padding} disabled={job.running} /></label>
-
-      <label class="fld"><span>Quality</span>
-        <select bind:value={quality} disabled={job.running}>
-          {#each presets as p}<option value={p}>{p}</option>{/each}
-        </select></label>
-
-      <label class="chk"><input type="checkbox" bind:checked={normalizeAudio} disabled={job.running} /> Normalize −16 LUFS</label>
-      {#if encoder.available}
-        <label class="chk"><input type="checkbox" bind:checked={useHardware} disabled={job.running} /> GPU ({encoder.name})</label>
-      {/if}
+      <SettingsPanel
+        bind:silenceDb
+        bind:minSilence
+        bind:padding
+        bind:quality
+        bind:normalizeAudio
+        bind:useHardware
+        {encoder}
+        disabled={job.running}
+      />
 
       <div class="summary">{ranges.length} cut(s) · keep {fmt(kept)} of {fmt(analysis.duration)}</div>
 
@@ -127,20 +120,13 @@
 
 <style>
   .editor { display: flex; flex-direction: column; height: 100%; gap: 12px; padding: 12px 16px 16px; }
-  .stage { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; flex: 1; min-height: 0; }
+  .stage { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; flex: 1; min-height: 0; }
   .preview { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   video { width: 100%; height: 100%; object-fit: contain; background: #000; border-radius: var(--radius-group); }
   .novideo { flex: 1; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--text-2); background: var(--field); border-radius: var(--radius-group); }
   .timebar { font-variant-numeric: tabular-nums; color: var(--text-2); font-size: 12px; }
   .panel { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
   .link { align-self: flex-start; background: none; color: var(--accent); padding: 0; font-size: 12px; }
-  .fld { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); }
-  .fld span { display: flex; justify-content: space-between; }
-  .fld em { font-style: normal; color: var(--text); font-variant-numeric: tabular-nums; }
-  .fld input[type='range'] { width: 100%; accent-color: var(--accent); }
-  .fld select { height: 32px; background: var(--field); border: 1px solid var(--border); border-radius: var(--radius-field); color: var(--text); padding: 0 8px; }
-  .chk { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-  .chk input { accent-color: var(--accent); }
   .summary { font-size: 12px; color: var(--text-2); padding: 6px 0; border-top: 1px solid var(--separator); }
   .out { height: 34px; background: var(--window-2); border: 1px solid var(--border-strong); border-radius: var(--radius-field); }
   .export, .cancel { height: 40px; font-size: 14px; font-weight: 600; border-radius: 8px; }
