@@ -328,11 +328,20 @@ function extractStreamInfo(metadata) {
 function getFrameRate(metadata) {
     const v = metadata.streams && metadata.streams.find(s => s.codec_type === 'video');
     if (!v) return 30;
-    const rate = v.r_frame_rate || v.avg_frame_rate;
-    if (!rate) return 30;
-    const [num, den] = rate.split('/').map(Number);
-    const fps = den ? num / den : num;
-    return (fps && isFinite(fps) && fps > 0) ? fps : 30;
+    const parse = (rate) => {
+        if (!rate) return null;
+        const [num, den] = rate.split('/').map(Number);
+        const fps = den ? num / den : num;
+        return (fps && isFinite(fps) && fps > 0) ? fps : null;
+    };
+    // r_frame_rate is the *maximum* rate and is frequently inflated on TS/AVI
+    // (e.g. 90 or 90000 where the real rate is 30). Trust avg_frame_rate when r
+    // looks inflated relative to it, then clamp to a sane 5–240 range so we never
+    // emit -r 90000 / -g 180000 and blow up the encoder.
+    const r = parse(v.r_frame_rate);
+    const avg = parse(v.avg_frame_rate);
+    let fps = (r && avg && r > avg * 1.5) ? avg : (r || avg || 30);
+    return Math.min(240, Math.max(5, fps));
 }
 
 function calculateDurationStats(silenceRanges, inputDuration) {
@@ -393,6 +402,10 @@ function getEncodingOptions(qualityPreset = 'medium', useHardwareEncoder = true,
     const audioBitrate = info.abitrate || '320k';
     const family = VIDEO_ENCODERS[inVcodec] || VIDEO_ENCODERS.h264;
 
+    // HEVC must be tagged 'hvc1' or Apple players (QuickTime, Preview, iOS) refuse
+    // to play it — FFmpeg's default 'hev1' tag shows a black/blank video there.
+    const videoTag = inVcodec === 'hevc' ? ['-tag:v', 'hvc1'] : [];
+
     // Quality knob per preset. NEVER crf 0 — libx264 tags true-lossless as
     // "High 4:4:4 Predictive", which hardware/software players render as a black screen.
     // We do NOT pass -profile:v; the encoder derives the right profile from pixFmt.
@@ -419,7 +432,7 @@ function getEncodingOptions(qualityPreset = 'medium', useHardwareEncoder = true,
             default:
                 videoQuality = ['-q:v', String(qVal)];
         }
-        return { videoCodec: family[detectedHWEncoder.type], videoQuality, pixFmt, audioCodec, audioBitrate, isHardware: true };
+        return { videoCodec: family[detectedHWEncoder.type], videoQuality, videoTag, pixFmt, audioCodec, audioBitrate, isHardware: true };
     }
 
     // Software path — encoder matches the input codec family.
@@ -437,7 +450,7 @@ function getEncodingOptions(qualityPreset = 'medium', useHardwareEncoder = true,
         // libx264
         videoQuality = ['-preset', preset === 'fast' ? 'veryfast' : isHigh ? 'medium' : 'veryfast', '-crf', String(crf)];
     }
-    return { videoCodec: sw, videoQuality, pixFmt, audioCodec, audioBitrate, isHardware: false };
+    return { videoCodec: sw, videoQuality, videoTag, pixFmt, audioCodec, audioBitrate, isHardware: false };
 }
 
 // ============================================================================
@@ -487,11 +500,23 @@ function buildLoudnormFilter(measured) {
 // FILTER SCRIPT GENERATION (trim/atrim + concat)
 // ============================================================================
 
-function buildFilterScript(talkingRanges, normalizeAudio, loudnormFilter) {
-    const filterParts = talkingRanges.map((r, i) =>
-        `[0:v]trim=start=${r.start.toFixed(4)}:end=${r.end.toFixed(4)},setpts=PTS-STARTPTS[v${i}];` +
-        `[0:a]atrim=start=${r.start.toFixed(4)}:end=${r.end.toFixed(4)},asetpts=PTS-STARTPTS[a${i}]`
-    );
+function buildFilterScript(talkingRanges, normalizeAudio, loudnormFilter, fps) {
+    // Snap every cut to the frame grid so each segment's trimmed VIDEO and AUDIO
+    // have the same duration. Otherwise video trim is frame-quantized while audio
+    // atrim is sample-exact; the per-segment mismatch accumulates across cuts into
+    // a growing A/V drift (lip-sync slips further out the longer the video runs).
+    // Full precision (NOT toFixed) — at NTSC rates (29.97/59.94/23.976) a frame time
+    // rounds up at 4 decimals and trim's exact PTS compare would then drop that frame.
+    const snap = (t) => (fps > 0) ? Math.round(t * fps) / fps : t;
+    const filterParts = talkingRanges.map((r, i) => {
+        const start = String(snap(r.start));
+        const end = String(snap(r.end));
+        // fps=… first forces the (possibly VFR) source onto a constant grid BEFORE
+        // trimming, so the snapped cut points actually land on real frames — iPhone
+        // and screen recordings are variable frame rate and would otherwise drift.
+        return `[0:v]fps=${fps},trim=start=${start}:end=${end},setpts=PTS-STARTPTS[v${i}];` +
+            `[0:a]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[a${i}]`;
+    });
 
     const concatInputs = talkingRanges.map((_, i) => `[v${i}][a${i}]`).join('');
 
@@ -527,10 +552,13 @@ function formatEta(percent, elapsed) {
 // VIDEO PROCESSING (trim+atrim+concat via filter_complex_script)
 // ============================================================================
 
-async function processVideoWithFilter(inputFile, outputFile, filterScriptPath, qualityPreset, expectedDuration, gopSize, event, useHardwareEncoder = true, streamInfo = null) {
+async function processVideoWithFilter(inputFile, outputFile, filterScriptPath, qualityPreset, expectedDuration, gopSize, event, useHardwareEncoder = true, streamInfo = null, fps = null) {
     if (isCancelled) throw new Error('Processing cancelled');
 
     const encoding = getEncodingOptions(qualityPreset, useHardwareEncoder, streamInfo);
+    // hvc1 tag and +faststart are ISO-BMFF (MP4/MOV) muxer options — MKV/WebM/AVI
+    // reject them ('movflags' hard-fails there). Only emit them for those containers.
+    const isIsoBmff = /\.(mp4|mov|m4v)$/i.test(outputFile);
     const args = [
         '-hide_banner',
         '-i', inputFile,
@@ -540,12 +568,16 @@ async function processVideoWithFilter(inputFile, outputFile, filterScriptPath, q
         '-map_metadata', '0',
         '-c:v', encoding.videoCodec,
         ...encoding.videoQuality,
+        ...(isIsoBmff ? encoding.videoTag : []),
         '-pix_fmt', encoding.pixFmt,
+        // Force constant frame rate so the concatenated output has a single, even
+        // frame grid — VFR input would otherwise reintroduce A/V drift after concat.
+        ...(fps ? ['-r', String(fps), '-fps_mode', 'cfr'] : []),
         ...(gopSize ? ['-g', String(gopSize)] : []),
         '-c:a', encoding.audioCodec,
         '-b:a', encoding.audioBitrate,
         '-avoid_negative_ts', 'make_zero',
-        '-movflags', '+faststart',
+        ...(isIsoBmff ? ['-movflags', '+faststart'] : []),
         '-threads', '0',
         '-y', outputFile
     ];
@@ -699,7 +731,8 @@ async function processVideo(inputFile, outputFile, silenceRanges, normalizeAudio
 
     const talkingRanges = calculateTalkingRanges(silenceRanges, inputDuration);
     const stats = calculateDurationStats(silenceRanges, inputDuration);
-    const gopSize = Math.max(1, Math.round(getFrameRate(metadata) * 2));
+    const fps = getFrameRate(metadata);
+    const gopSize = Math.max(1, Math.round(fps * 2));
 
     event.reply('log', `📊 Input: ${stats.inputDuration.toFixed(1)}s | Removing: ${stats.totalSilenceDuration.toFixed(1)}s | Expected: ${stats.expectedOutputDuration.toFixed(1)}s`);
     event.reply('log', `📦 Found ${talkingRanges.length} talking ranges`);
@@ -727,12 +760,12 @@ async function processVideo(inputFile, outputFile, silenceRanges, normalizeAudio
     const tempDir = path.join(path.dirname(outputFile), TEMP_DIR_NAME);
 
     try {
-        const filterGraph = buildFilterScript(talkingRanges, normalizeAudio, loudnormFilter);
+        const filterGraph = buildFilterScript(talkingRanges, normalizeAudio, loudnormFilter, fps);
         const filterScriptPath = await writeFilterScript(filterGraph, tempDir);
 
         event.reply('log', `🚀 Processing ${normalizeAudio ? '(pass 2/2) ' : ''}with filter_complex_script (${talkingRanges.length} segments)`);
 
-        await processVideoWithFilter(inputFile, outputFile, filterScriptPath, qualityPreset, stats.expectedOutputDuration, gopSize, event, useHardwareEncoder, streamInfo);
+        await processVideoWithFilter(inputFile, outputFile, filterScriptPath, qualityPreset, stats.expectedOutputDuration, gopSize, event, useHardwareEncoder, streamInfo, fps);
 
         event.reply('log', `✅ Video processing completed successfully`);
     } finally {
