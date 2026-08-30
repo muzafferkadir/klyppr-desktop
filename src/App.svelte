@@ -8,7 +8,8 @@
   import { check, type Update } from '@tauri-apps/plugin-updater'
   import { relaunch } from '@tauri-apps/plugin-process'
   import { job, run, cancel, initJobEvents } from './lib/job.svelte'
-  import { getEncoderInfo, type QualityPreset } from './lib/tauri'
+  import { getEncoderInfo, analyzeAudio, type QualityPreset, type AudioAnalysis } from './lib/tauri'
+  import Editor from './components/Editor.svelte'
 
   const logo = '/logo.png'
 
@@ -31,7 +32,28 @@
   let activePreset = $state<'recommended' | 'fast' | null>('recommended')
 
   let encoder = $state({ available: false, name: '', description: '' })
+  let analysis = $state<AudioAnalysis | null>(null)
+  let analyzing = $state(false)
   let dragOver = $state(false)
+
+  // Load a video into the editor: probe + analyze its audio, then show Editor.
+  async function loadVideo(path: string) {
+    inputPath = path
+    analysis = null
+    analyzing = true
+    try {
+      analysis = await analyzeAudio(path)
+    } catch {
+      analysis = null
+    } finally {
+      analyzing = false
+    }
+  }
+
+  function resetVideo() {
+    inputPath = ''
+    analysis = null
+  }
   let logExpanded = $state(false)
   let logCopied = $state(false)
   let showModal = $state(false)
@@ -99,7 +121,7 @@
 
   async function pickInput() {
     const f = await open({ multiple: false, filters: [{ name: 'Video', extensions: VIDEO_EXTS }] })
-    if (typeof f === 'string') inputPath = f
+    if (typeof f === 'string') loadVideo(f)
   }
   async function pickOutput() {
     const d = await open({ directory: true })
@@ -171,7 +193,7 @@
       else if (e.payload.type === 'drop') {
         dragOver = false
         const p = e.payload.paths?.[0]
-        if (p && VIDEO_EXTS.includes(p.split('.').pop()!.toLowerCase())) inputPath = p
+        if (p && VIDEO_EXTS.includes(p.split('.').pop()!.toLowerCase())) loadVideo(p)
       }
     })
 
@@ -205,7 +227,24 @@
       </div>
     {/if}
 
-    <main class="main-content">
+    <main class="main-content" class:editing={analysis}>
+      {#if analysis}
+        <Editor
+          {inputPath}
+          bind:outputPath
+          {analysis}
+          {encoder}
+          onReset={resetVideo}
+          bind:silenceDb
+          bind:minSilence
+          bind:padding
+          bind:quality
+          bind:normalizeAudio
+          bind:useHardware
+        />
+      {:else if analyzing}
+        <div class="analyzing"><div class="spinner"></div>Analyzing audio…</div>
+      {:else}
       <div class="content-grid">
         <!-- Left: files & presets -->
         <div class="col col-left">
@@ -368,6 +407,7 @@
           {/if}
         </section>
       {/if}
+      {/if}
     </main>
   </div>
 </div>
@@ -434,4 +474,23 @@
     border-radius: var(--radius-field);
   }
   .update-bar button:disabled { opacity: 0.6; }
+
+  .main-content.editing { padding: 0; }
+  .analyzing {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--text-2);
+  }
+  .analyzing .spinner {
+    width: 26px; height: 26px;
+    border: 3px solid rgba(255,255,255,0.12);
+    border-top-color: var(--accent);
+    border-radius: 999px;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
