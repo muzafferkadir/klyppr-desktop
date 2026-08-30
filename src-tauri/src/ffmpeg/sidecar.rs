@@ -40,6 +40,29 @@ pub async fn ffprobe(app: &AppHandle, args: &[&str]) -> AppResult<String> {
     run_capture(app, "ffprobe", args).await
 }
 
+/// Run ffmpeg to completion and return its STDERR. ffmpeg writes analysis
+/// output (silencedetect, loudnorm json) to stderr, and `-f null -` runs exit
+/// 0, so success returns stderr; failure surfaces the tail as an error.
+pub async fn ffmpeg_stderr(app: &AppHandle, args: &[&str]) -> AppResult<String> {
+    let output = app
+        .shell()
+        .sidecar("ffmpeg")
+        .map_err(|e| AppError::SidecarMissing(format!("ffmpeg: {e}")))?
+        .args(args)
+        .output()
+        .await
+        .map_err(|e| AppError::SidecarSpawn(format!("ffmpeg: {e}")))?;
+
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stderr).into_owned())
+    } else {
+        Err(AppError::FfmpegExit {
+            code: output.status.code(),
+            stderr_tail: stderr_tail(&output.stderr),
+        })
+    }
+}
+
 /// First line of `ffprobe -version` — a startup smoke test that the bundled
 /// sidecar is present, signed, and runnable.
 pub async fn ffprobe_version(app: &AppHandle) -> AppResult<String> {
