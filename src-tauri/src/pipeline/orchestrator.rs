@@ -107,8 +107,13 @@ async fn pipeline_body(
 
     let video = media.video.as_ref().expect("plan requires a video stream");
     let fps = video.effective_fps();
+    log(app, job_id, LogLevel::Info, format!(
+        "Input: {} · {}×{} · {:.2} fps",
+        fmt_dur(media.duration), video.width, video.height, fps.as_f64()
+    ));
 
     phase(app, job_id, Phase::Detect);
+    log(app, job_id, LogLevel::Info, "Analyzing audio for silence…");
     let silences = silence::detect_silence(
         app,
         &request.input_path,
@@ -119,6 +124,14 @@ async fn pipeline_body(
     .await?;
     bail_if_cancelled(token)?;
 
+    let removed_raw: f64 = silences.iter().map(|s| s.end - s.start).sum();
+    log(app, job_id, LogLevel::Info, format!(
+        "Found {} silent section(s) — about {} to cut", silences.len(), fmt_dur(removed_raw)
+    ));
+    for s in &silences {
+        log(app, job_id, LogLevel::Info, format!("  ✂ {} → {}", fmt_ts(s.start), fmt_ts(s.end)));
+    }
+
     let segments = timeline::build_timeline(&silences, media.duration, request.padding, fps);
     if segments.is_empty() {
         return Err(AppError::UnsupportedMedia(
@@ -127,6 +140,11 @@ async fn pipeline_body(
     }
     let total_frames: u64 = segments.iter().map(|s| s.frame_count()).sum();
     let expected_duration = total_frames as f64 * fps.den as f64 / fps.num as f64;
+    log(app, job_id, LogLevel::Info, format!(
+        "Keeping {} clip(s): {} of {} ({} removed)",
+        segments.len(), fmt_dur(expected_duration), fmt_dur(media.duration),
+        fmt_dur(media.duration - expected_duration)
+    ));
 
     // Optional two-pass loudness normalization, measured on the CUT timeline.
     let loudnorm_filter = if request.normalize_audio {
@@ -151,6 +169,10 @@ async fn pipeline_body(
     let gop = ((fps.as_f64() * 2.0).round() as u32).max(1);
 
     phase(app, job_id, Phase::Encode);
+    log(app, job_id, LogLevel::Info, format!(
+        "Encoding with {} ({})",
+        plan.video.encoder, if plan.video.is_hardware { "GPU" } else { "CPU" }
+    ));
     let active_plan = encode_with_fallback(
         app, job_id, token, &media, request, &avail, &plan, &request.input_path, &script,
         &partial_str, gop, expected_duration,
@@ -184,7 +206,9 @@ async fn encode_with_fallback(
     expected_duration: f64,
 ) -> AppResult<OutputPlan> {
     let progress = make_progress_emitter(app, job_id);
-    let logger = make_logger(app, job_id);
+    // ffmpeg's raw stderr is noisy (stream mapping spam); we emit our own
+    // high-level logs instead, so the encoder's stderr is dropped from the UI.
+    let logger = |_: &str| {};
 
     let args = encode::build_encode_args(plan, input, script, partial, gop);
     match encode::run_encode(app, args, expected_duration, token, &progress, &logger).await {
@@ -221,10 +245,16 @@ fn make_progress_emitter(app: &AppHandle, job_id: &JobId) -> impl Fn(f64) + Send
     }
 }
 
-fn make_logger(app: &AppHandle, job_id: &JobId) -> impl Fn(&str) + Send + Sync {
-    let app = app.clone();
-    let job_id = job_id.clone();
-    move |line: &str| log(&app, &job_id, LogLevel::Info, line.to_string())
+/// Format a duration as M:SS (e.g. 4:56).
+fn fmt_dur(secs: f64) -> String {
+    let s = secs.max(0.0).round() as u64;
+    format!("{}:{:02}", s / 60, s % 60)
+}
+
+/// Format a timestamp as M:SS.d (e.g. 1:23.4).
+fn fmt_ts(secs: f64) -> String {
+    let s = secs.max(0.0);
+    format!("{}:{:04.1}", (s as u64) / 60, s % 60.0)
 }
 
 fn validate(request: &JobRequest) -> AppResult<()> {

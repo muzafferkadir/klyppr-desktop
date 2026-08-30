@@ -46,10 +46,27 @@
   const phaseLabel: Record<string, string> = {
     probe: 'Analyzing file', detect: 'Detecting silence', measure: 'Measuring loudness', encode: 'Encoding', verify: 'Verifying',
   }
+
+  let startTime = 0
+  $effect(() => {
+    if (job.running && !startTime) startTime = Date.now()
+    if (!job.running) startTime = 0
+  })
+
+  function etaSuffix(): string {
+    if (!startTime || job.progress < 0.03) return ''
+    const elapsed = (Date.now() - startTime) / 1000
+    const remaining = elapsed / job.progress - elapsed
+    if (!isFinite(remaining) || remaining < 1) return ''
+    return remaining < 60
+      ? ` — ~${Math.round(remaining)}s left`
+      : ` — ~${Math.floor(remaining / 60)}m ${Math.round(remaining % 60)}s left`
+  }
+
   const statusText = $derived(
     !job.running && job.result
       ? job.result.ok ? 'Process completed!' : job.result.cancelled ? 'Processing cancelled' : `Error: ${job.result.error}`
-      : job.phase ? `${phaseLabel[job.phase] ?? job.phase}: ${Math.round(job.progress * 100)}%` : 'Starting process...',
+      : job.phase ? `${phaseLabel[job.phase] ?? job.phase}: ${Math.round(job.progress * 100)}%${job.phase === 'encode' ? etaSuffix() : ''}` : 'Starting process...',
   )
 
   const SETTINGS_KEY = 'klyppr-settings'
