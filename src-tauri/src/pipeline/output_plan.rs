@@ -6,6 +6,7 @@ use crate::domain::media::{MediaInfo, Rational, VideoCodec};
 /// passed in so this resolver stays pure and testable). v1 implements Apple
 /// VideoToolbox; the Windows families are placeholders wired up with CI.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))] // Nvenc/Qsv/Amf are Windows-only
 pub enum HwEncoder {
     VideoToolbox,
     Nvenc,

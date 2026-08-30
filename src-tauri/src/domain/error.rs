@@ -23,6 +23,7 @@ pub enum AppError {
     #[error("ffmpeg exited with code {code:?}: {stderr_tail}")]
     FfmpegExit { code: Option<i32>, stderr_tail: String },
 
+    #[allow(dead_code)] // used once filtergraph validation lands
     #[error("filter graph error: {0}")]
     FilterGraph(String),
 

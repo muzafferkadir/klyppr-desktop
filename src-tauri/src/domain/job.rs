@@ -32,6 +32,7 @@ pub enum Phase {
 
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)] // Error level reserved for UI log styling
 pub enum LogLevel {
     Info,
     Warn,

@@ -1,6 +1,7 @@
 pub mod encode;
 pub mod filtergraph;
 pub mod loudnorm;
+pub mod orchestrator;
 pub mod output_plan;
 pub mod probe;
 pub mod silence;
