@@ -129,9 +129,12 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 use tauri::Manager;
+                use tauri_plugin_decorum::WebviewWindowExt;
                 use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
                 if let Some(win) = app.get_webview_window("main") {
                     let _ = apply_vibrancy(&win, NSVisualEffectMaterial::UnderWindowBackground, None, None);
+                    // Center the traffic lights in the taller header (legacy trafficLightPosition).
+                    let _ = win.set_traffic_lights_inset(16.0, 22.0);
                 }
             }
             // Proactively provision ffmpeg on launch so the first job is instant.

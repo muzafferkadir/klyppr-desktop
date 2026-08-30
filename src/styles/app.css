@@ -55,12 +55,15 @@ body {
     -moz-osx-font-smoothing: grayscale;
     overflow: hidden;
     user-select: none;
+    -webkit-user-select: none;
+    cursor: default;
 }
 
 input,
 select,
 .log-container {
     user-select: text;
+    -webkit-user-select: text;
 }
 
 /* ---------- Window shell ---------- */

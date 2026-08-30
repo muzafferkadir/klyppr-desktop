@@ -3,6 +3,7 @@
   import { listen } from '@tauri-apps/api/event'
   import { open } from '@tauri-apps/plugin-dialog'
   import { getCurrentWebview } from '@tauri-apps/api/webview'
+  import { getCurrentWindow } from '@tauri-apps/api/window'
   import { revealItemInDir } from '@tauri-apps/plugin-opener'
   import { check, type Update } from '@tauri-apps/plugin-updater'
   import { relaunch } from '@tauri-apps/plugin-process'
@@ -137,10 +138,9 @@
 
     getEncoderInfo().then((info) => {
       encoder = info
-      if (info.available) useHardware = false // GPU off by default, honor restore
-    }).catch(() => {})
-
-    restoreSettings()
+      if (info.available) useHardware = true // GPU on by default when available
+      restoreSettings() // saved preference overrides the default
+    }).catch(() => restoreSettings())
 
     const unSetup = listen<{ phase: string; binary?: string; fraction?: number }>('ffmpeg-setup', (e) => {
       const p = e.payload
@@ -166,7 +166,12 @@
 
 <div class="app-wrapper">
   <div class="container">
-    <header class="header">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <header
+      class="header"
+      onmousedown={(e) => { if (e.button === 0) getCurrentWindow().startDragging() }}
+      ondblclick={() => getCurrentWindow().toggleMaximize()}
+    >
       <div class="brand">
         <span class="logo-badge"><img class="logo-icon" src={logo} alt="Klyppr" /></span>
         <span class="brand-text">
@@ -197,7 +202,7 @@
                 <label class="form-label" for="inputPath">Input Video</label>
                 <div class="input-group" class:drag-over={dragOver}>
                   <input id="inputPath" type="text" readonly value={inputPath} placeholder="Select or drop video file..." class="file-input" />
-                  <button class="browse-btn" onclick={pickInput}>
+                  <button class="browse-btn" onclick={pickInput} data-tooltip="Browse for video">
                     <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
                     <span class="btn-text">Browse</span>
                   </button>
@@ -208,7 +213,7 @@
                 <label class="form-label" for="outputPath">Output Folder</label>
                 <div class="input-group">
                   <input id="outputPath" type="text" readonly value={outputPath} placeholder="Select output folder..." class="file-input" />
-                  <button class="browse-btn" onclick={pickOutput}>
+                  <button class="browse-btn" onclick={pickOutput} data-tooltip="Browse for folder">
                     <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
                     <span class="btn-text">Browse</span>
                   </button>
@@ -223,11 +228,11 @@
               Quick Presets
             </h3>
             <div class="button-group">
-              <button class="preset-btn" class:active={activePreset === 'recommended'} onclick={() => applyPreset('recommended')}>
+              <button class="preset-btn" class:active={activePreset === 'recommended'} onclick={() => applyPreset('recommended')} data-tooltip="Balanced quality and speed">
                 <span class="preset-name">Recommended</span>
                 <span class="preset-desc">Balanced quality</span>
               </button>
-              <button class="preset-btn" class:active={activePreset === 'fast'} onclick={() => applyPreset('fast')}>
+              <button class="preset-btn" class:active={activePreset === 'fast'} onclick={() => applyPreset('fast')} data-tooltip="Faster processing, more aggressive">
                 <span class="preset-name">Aggressive</span>
                 <span class="preset-desc">Tight detection</span>
               </button>
@@ -245,19 +250,19 @@
             <div class="settings-group visible">
               <div class="settings-grid">
                 <div class="form-group">
-                  <label class="form-label" for="silenceDb">Silence Threshold <span class="unit">dB</span></label>
+                  <label class="form-label" for="silenceDb" data-tooltip="Lower values = more sensitive">Silence Threshold <span class="unit">dB</span></label>
                   <input id="silenceDb" type="number" bind:value={silenceDb} step="1" class="number-input" />
                 </div>
                 <div class="form-group">
-                  <label class="form-label" for="minSilence">Min. Silence <span class="unit">sec</span></label>
+                  <label class="form-label" for="minSilence" data-tooltip="Minimum silence duration to detect">Min. Silence <span class="unit">sec</span></label>
                   <input id="minSilence" type="number" bind:value={minSilence} step="0.1" min="0" class="number-input" />
                 </div>
                 <div class="form-group">
-                  <label class="form-label" for="padding">Padding <span class="unit">sec</span></label>
+                  <label class="form-label" for="padding" data-tooltip="Keep this much audio before/after silence">Padding <span class="unit">sec</span></label>
                   <input id="padding" type="number" bind:value={padding} step="0.01" min="0" class="number-input" />
                 </div>
                 <div class="form-group form-group-wide">
-                  <label class="form-label" for="quality">Video Quality</label>
+                  <label class="form-label" for="quality" data-tooltip="Higher quality = slower processing">Video Quality</label>
                   <select id="quality" bind:value={quality} class="select-input">
                     <option value="lossless">Lossless (No Quality Loss, Largest File)</option>
                     <option value="high">High (Best Quality, Slower)</option>
@@ -268,7 +273,7 @@
               </div>
 
               <div class="checkbox-group">
-                <label class="checkbox-label" for="normalizeAudio">
+                <label class="checkbox-label" for="normalizeAudio" data-tooltip="Normalize audio to YouTube standards">
                   <span class="checkbox-text">
                     <span class="checkbox-title">
                       <svg class="checkbox-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 7H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" /></svg>
@@ -280,7 +285,7 @@
                 </label>
 
                 {#if encoder.available}
-                  <label class="checkbox-label" for="useHardware">
+                  <label class="checkbox-label" for="useHardware" data-tooltip="Use GPU for faster video encoding">
                     <span class="checkbox-text">
                       <span class="checkbox-title">
                         <svg class="checkbox-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" /><line x1="9" y1="1" x2="9" y2="4" /><line x1="15" y1="1" x2="15" y2="4" /><line x1="9" y1="20" x2="9" y2="23" /><line x1="15" y1="20" x2="15" y2="23" /><line x1="20" y1="9" x2="23" y2="9" /><line x1="20" y1="14" x2="23" y2="14" /><line x1="1" y1="9" x2="4" y2="9" /><line x1="1" y1="14" x2="4" y2="14" /></svg>
@@ -299,12 +304,12 @@
 
       <section class="action-section">
         {#if job.running}
-          <button class="cancel-btn" onclick={cancel}>
+          <button class="cancel-btn" onclick={cancel} data-tooltip="Cancel current processing">
             <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
             <span class="btn-text">Cancel</span>
           </button>
         {:else}
-          <button class="start-btn" disabled={!canStart} onclick={start}>
+          <button class="start-btn" disabled={!canStart} onclick={start} data-tooltip={canStart ? 'Start processing video' : 'Select input and output first'}>
             <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4" /></svg>
             <span class="btn-text">Start Processing</span>
           </button>
