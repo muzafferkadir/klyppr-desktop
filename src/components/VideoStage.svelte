@@ -32,10 +32,10 @@
 </script>
 
 <div class="stage">
+  <button class="close" type="button" onclick={onReset} aria-label="Choose another video" title="Choose another video">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+  </button>
   <div class="preview">
-    <button class="close" type="button" onpointerdown={(e) => { e.stopPropagation(); e.preventDefault(); onReset() }} aria-label="Choose another video" title="Choose another video">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-    </button>
     {#if videoError}
       <div class="novideo">Preview unavailable for this format — the timeline and export still work.</div>
     {:else}
@@ -46,10 +46,10 @@
 </div>
 
 <style>
-  .stage { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
+  .stage { position: relative; display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
   .preview { position: relative; flex: 1; min-height: 0; display: flex; justify-content: center; }
   .close {
-    position: absolute; top: 8px; right: 8px; z-index: 10;
+    position: absolute; top: 8px; right: 8px; z-index: 30;
     width: 30px; height: 30px; border-radius: 999px;
     background: rgba(0, 0, 0, 0.55); color: #fff; border: none;
     display: grid; place-items: center; cursor: pointer; opacity: 0.85;

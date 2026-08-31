@@ -14,14 +14,9 @@
 cask "klyppr" do
   version "3.1.0"
 
-  on_arm do
-    sha256 "REPLACE_WITH_ARM_DMG_SHA256"
-    url "https://github.com/muzafferkadir/klyppr-desktop/releases/download/v#{version}/Klyppr_#{version}_aarch64.dmg"
-  end
-  on_intel do
-    sha256 "REPLACE_WITH_X64_DMG_SHA256"
-    url "https://github.com/muzafferkadir/klyppr-desktop/releases/download/v#{version}/Klyppr_#{version}_x64.dmg"
-  end
+  # Universal build — one .dmg for Apple Silicon and Intel.
+  sha256 "REPLACE_WITH_UNIVERSAL_DMG_SHA256"
+  url "https://github.com/muzafferkadir/klyppr-desktop/releases/download/v#{version}/Klyppr_#{version}_universal.dmg"
 
   name "Klyppr"
   desc "Automatic video silence clipper"

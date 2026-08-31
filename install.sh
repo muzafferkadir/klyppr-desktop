@@ -14,18 +14,20 @@ if [ "$(uname)" != "Darwin" ]; then
   exit 1
 fi
 
-# Pick the asset for this Mac's architecture.
-case "$(uname -m)" in
-  arm64) PATTERN="aarch64.dmg" ;;
-  x86_64) PATTERN="x64.dmg" ;;
-  *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
-esac
-
 echo "Fetching the latest Klyppr release…"
 API="https://api.github.com/repos/$REPO/releases/latest"
-URL="$(curl -fsSL "$API" | grep -o "https://[^\"]*$PATTERN" | head -n1)"
+ASSETS="$(curl -fsSL "$API" | grep -o 'https://[^"]*\.dmg')"
+# Universal .dmg runs on both Apple Silicon and Intel; fall back to an
+# arch-specific build if only those are published.
+case "$(uname -m)" in
+  arm64) ARCH_PAT="aarch64.dmg" ;;
+  x86_64) ARCH_PAT="x64.dmg" ;;
+  *) ARCH_PAT="aarch64.dmg" ;;
+esac
+URL="$(echo "$ASSETS" | grep 'universal.dmg' | head -n1)"
+[ -z "$URL" ] && URL="$(echo "$ASSETS" | grep "$ARCH_PAT" | head -n1)"
 if [ -z "$URL" ]; then
-  echo "No macOS .dmg ($PATTERN) found in the latest release." >&2
+  echo "No macOS .dmg found in the latest release." >&2
   exit 1
 fi
 
