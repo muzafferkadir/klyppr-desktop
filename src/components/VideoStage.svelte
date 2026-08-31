@@ -36,17 +36,13 @@
     {/if}
   </div>
   <div class="meta">{fmt(currentTime)} / {fmt(analysis.duration)} · {ranges.length} cut(s) · keep {fmt(kept)}</div>
-
-  <!-- P5: waveform + cuts render here -->
-  <div class="timeline-placeholder">timeline (waveform + cuts) — coming next</div>
 </div>
 
 <style>
   .stage { display: flex; flex-direction: column; gap: 8px; }
   .preview { display: flex; justify-content: center; }
-  video, .novideo { width: 100%; max-height: 46vh; aspect-ratio: 16 / 9; background: #000; border-radius: var(--radius-group); }
+  video, .novideo { width: 100%; max-height: 70vh; aspect-ratio: 16 / 9; background: #000; border-radius: var(--radius-group); }
   video { object-fit: contain; }
   .novideo { display: grid; place-items: center; text-align: center; padding: 24px; color: var(--text-2); background: var(--field); }
   .meta { font-variant-numeric: tabular-nums; color: var(--text-2); font-size: 12px; }
-  .timeline-placeholder { height: 92px; display: grid; place-items: center; color: var(--text-3); background: var(--field); border: 1px solid var(--border); border-radius: var(--radius-group); font-size: 12px; }
 </style>

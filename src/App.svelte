@@ -238,15 +238,20 @@
     {/if}
 
     <main class="main-content">
-      {#if analyzing}
-        <div class="analyzing"><div class="spinner"></div>Analyzing audio…</div>
-      {:else if analysis}
-        <VideoStage {inputPath} {analysis} {ranges} />
-      {/if}
+      <div class="editor-grid">
+        <!-- Left: video preview (empty until a video is selected) -->
+        <div class="video-col">
+          {#if analyzing}
+            <div class="video-empty"><div class="spinner"></div>Analyzing audio…</div>
+          {:else if analysis}
+            <VideoStage {inputPath} {analysis} {ranges} />
+          {:else}
+            <div class="video-empty">Select or drop a video to preview</div>
+          {/if}
+        </div>
 
-      <div class="content-grid">
-        <!-- Left: files & presets -->
-        <div class="col col-left">
+        <!-- Right: files + presets + settings -->
+        <div class="settings-col">
           <section class="card">
             <h3 class="section-title">
               <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z" /><path d="M13 2v7h7" /></svg>
@@ -293,10 +298,7 @@
               </button>
             </div>
           </section>
-        </div>
 
-        <!-- Right: settings -->
-        <div class="col col-right">
           <section class="card settings-section">
             <h3 class="section-title">
               <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" /></svg>
@@ -356,6 +358,11 @@
           </section>
         </div>
       </div>
+
+      {#if analysis}
+        <!-- P5: waveform timeline renders here -->
+        <div class="timeline-bar">timeline (waveform + cuts) — coming next</div>
+      {/if}
 
       <section class="action-section">
         {#if job.running}
@@ -473,16 +480,23 @@
   }
   .update-bar button:disabled { opacity: 0.6; }
 
-  .analyzing {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    color: var(--text-2);
+  /* Always-on 2-column editor: video left, settings right. */
+  .editor-grid { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 16px; align-items: start; }
+  .video-col { min-width: 0; position: sticky; top: 0; }
+  .settings-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .video-empty {
+    width: 100%; aspect-ratio: 16 / 9; max-height: 70vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    background: var(--field); border: 1px solid var(--border); border-radius: var(--radius-group);
+    color: var(--text-3); font-size: 13px;
   }
-  .analyzing .spinner {
+  .timeline-bar {
+    height: 92px; display: grid; place-items: center;
+    background: var(--field); border: 1px solid var(--border); border-radius: var(--radius-group);
+    color: var(--text-3); font-size: 12px;
+  }
+
+  .video-empty .spinner {
     width: 26px; height: 26px;
     border: 3px solid rgba(255,255,255,0.12);
     border-top-color: var(--accent);
