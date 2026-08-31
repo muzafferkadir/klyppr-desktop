@@ -64,7 +64,7 @@
   let update = $state<Update | null>(null)
   let updateBusy = $state(false)
 
-  const canStart = $derived(!!inputPath && !!outputPath && !job.running)
+  const canStart = $derived(!!inputPath && !job.running)
 
   // When a video is analyzed, cuts are computed client-side (live from settings)
   // and sent to the backend so the preview matches the output exactly.
@@ -135,7 +135,12 @@
     if (typeof d === 'string') outputPath = d
   }
 
-  function start() {
+  async function start() {
+    if (!outputPath) {
+      const d = await open({ directory: true })
+      if (typeof d !== 'string') return
+      outputPath = d
+    }
     saveSettings()
     showModal = false
     logExpanded = false
@@ -246,42 +251,15 @@
           {:else if analysis}
             <VideoStage {inputPath} {analysis} {ranges} />
           {:else}
-            <div class="video-empty">Select or drop a video to preview</div>
+            <button class="video-empty" class:drag-over={dragOver} onclick={pickInput}>
+              <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /><path d="M12 11v6M9 14l3-3 3 3" /></svg>
+              Select or drop a video
+            </button>
           {/if}
         </div>
 
         <!-- Right: files + presets + settings -->
         <div class="settings-col">
-          <section class="card">
-            <h3 class="section-title">
-              <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z" /><path d="M13 2v7h7" /></svg>
-              Files
-            </h3>
-            <div class="file-selection">
-              <div class="form-group">
-                <label class="form-label" for="inputPath">Input Video</label>
-                <div class="input-group" class:drag-over={dragOver}>
-                  <input id="inputPath" type="text" readonly value={inputPath} placeholder="Select or drop video file..." class="file-input" />
-                  <button class="browse-btn" onclick={pickInput} data-tooltip="Browse for video">
-                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
-                    <span class="btn-text">Browse</span>
-                  </button>
-                </div>
-                <span class="field-hint">Drag &amp; drop a video anywhere on this window</span>
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="outputPath">Output Folder</label>
-                <div class="input-group">
-                  <input id="outputPath" type="text" readonly value={outputPath} placeholder="Select output folder..." class="file-input" />
-                  <button class="browse-btn" onclick={pickOutput} data-tooltip="Browse for folder">
-                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
-                    <span class="btn-text">Browse</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-
           <section class="card presets-section">
             <h3 class="section-title">
               <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
@@ -297,9 +275,9 @@
                 <span class="preset-desc">Tight detection</span>
               </button>
             </div>
-          </section>
 
-          <section class="card settings-section">
+            <div class="sp-sep"></div>
+
             <h3 class="section-title">
               <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" /></svg>
               Advanced Settings
@@ -484,12 +462,15 @@
   .editor-grid { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 16px; align-items: start; }
   .video-col { min-width: 0; position: sticky; top: 0; }
   .settings-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .sp-sep { height: 1px; background: var(--separator); margin: 4px 0; }
   .video-empty {
     width: 100%; aspect-ratio: 16 / 9; max-height: 70vh;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
-    background: var(--field); border: 1px solid var(--border); border-radius: var(--radius-group);
-    color: var(--text-3); font-size: 13px;
+    background: var(--field); border: 1px dashed var(--border-strong); border-radius: var(--radius-group);
+    color: var(--text-3); font-size: 13px; cursor: pointer; transition: border-color 0.15s, background 0.15s;
   }
+  .video-empty:hover { border-color: var(--accent); color: var(--text-2); }
+  .video-empty.drag-over { border-color: var(--accent); background: rgba(99, 102, 241, 0.08); color: var(--text); }
   .timeline-bar {
     height: 92px; display: grid; place-items: center;
     background: var(--field); border: 1px solid var(--border); border-radius: var(--radius-group);
