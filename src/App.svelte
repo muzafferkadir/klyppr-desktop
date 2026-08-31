@@ -479,7 +479,7 @@
   }
   .editor-grid { display: contents; }
   .video-col { grid-area: video; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-  .settings-col { grid-area: options; display: flex; flex-direction: column; gap: 16px; min-width: 0; min-height: 0; overflow-y: auto; }
+  .settings-col { grid-area: options; display: flex; flex-direction: column; gap: 16px; min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; }
   .timeline-bar { grid-area: timeline; }
   :global(.main-content > .action-section) { grid-area: action; }
   :global(.main-content > .progress-section) { grid-area: progress; }
