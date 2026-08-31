@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Klyppr — Install</title>
+  <meta name="description" content="Klyppr — automatic video silence cutter. One-line install for macOS and Windows." />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <style>
+    :root {
+      --bg: #0e0e12;
+      --bg2: #16161d;
+      --card: #1b1b23;
+      --border: rgba(255,255,255,0.09);
+      --text: #f2f2f7;
+      --text-2: rgba(235,235,245,0.62);
+      --text-3: rgba(235,235,245,0.35);
+      --accent: #6d6cff;
+      --accent-2: #8a5cff;
+      --green: #32d74b;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-font-smoothing: antialiased; }
+    body {
+      background: radial-gradient(1200px 700px at 50% -10%, #24243a 0%, var(--bg) 60%);
+      color: var(--text);
+      font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      min-height: 100vh;
+      padding: 48px 20px 80px;
+    }
+    .wrap { max-width: 760px; margin: 0 auto; }
+    header { text-align: center; margin-bottom: 40px; }
+    .logo {
+      width: 84px; height: 84px; border-radius: 20px; margin: 0 auto 18px;
+      box-shadow: 0 12px 40px rgba(109,108,255,0.28);
+    }
+    h1 { font-size: 40px; font-weight: 700; letter-spacing: -0.02em; }
+    .tag { color: var(--text-2); font-size: 17px; margin-top: 10px; }
+    .keep { color: var(--green); font-weight: 600; }
+
+    .tabs { display: flex; gap: 8px; justify-content: center; margin: 32px 0 18px; }
+    .tab {
+      padding: 9px 20px; border-radius: 999px; border: 1px solid var(--border);
+      background: var(--bg2); color: var(--text-2); font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: all .15s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .card {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 22px; margin-bottom: 16px;
+    }
+    .step { color: var(--text-3); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 12px; }
+    .cmd {
+      display: flex; align-items: center; gap: 12px;
+      background: #0b0b0f; border: 1px solid var(--border); border-radius: 10px;
+      padding: 14px 16px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13.5px;
+      overflow-x: auto;
+    }
+    .cmd code { color: #e6e6f0; white-space: nowrap; }
+    .cmd .prompt { color: var(--accent-2); user-select: none; }
+    .copy {
+      margin-left: auto; flex-shrink: 0;
+      background: var(--accent); color: #fff; border: none; border-radius: 8px;
+      padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s;
+    }
+    .copy:hover { background: var(--accent-2); }
+    .copy.done { background: var(--green); }
+    .hint { color: var(--text-2); font-size: 13.5px; margin-top: 12px; }
+    .hint b { color: var(--text); font-weight: 600; }
+    .alt { color: var(--text-3); font-size: 13px; margin-top: 18px; }
+    .alt a { color: var(--accent-2); text-decoration: none; }
+    .alt a:hover { text-decoration: underline; }
+
+    .foot { text-align: center; color: var(--text-3); font-size: 13px; margin-top: 40px; }
+    .foot a { color: var(--text-2); text-decoration: none; }
+    .foot a:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <img class="logo" src="logo.png" alt="Klyppr" />
+      <h1>Klyppr</h1>
+      <p class="tag">Automatic video silence cutter. Detects the quiet gaps, <span class="keep">keeps</span> the good parts.</p>
+    </header>
+
+    <div class="tabs">
+      <button class="tab" data-os="mac">🍎 macOS</button>
+      <button class="tab" data-os="win">🪟 Windows</button>
+    </div>
+
+    <!-- macOS -->
+    <section class="panel" data-os="mac">
+      <div class="card">
+        <div class="step">1 · Open Terminal</div>
+        <p class="hint">Press <b>⌘ + Space</b>, type <b>Terminal</b>, hit Enter.</p>
+      </div>
+      <div class="card">
+        <div class="step">2 · Paste this command</div>
+        <div class="cmd">
+          <span class="prompt">$</span>
+          <code id="mac-cmd">curl -fsSL https://raw.githubusercontent.com/muzafferkadir/klyppr-desktop/main/install.sh | bash</code>
+          <button class="copy" data-target="mac-cmd">Copy</button>
+        </div>
+        <p class="hint">Installs <b>Klyppr.app</b> to Applications (Apple Silicon &amp; Intel). Clears quarantine so it opens right away — no Gatekeeper prompt.</p>
+      </div>
+      <p class="alt">Prefer Homebrew? <code>brew install --cask muzafferkadir/tap/klyppr</code> · or <a href="https://github.com/muzafferkadir/klyppr-desktop/releases/latest">download the .dmg</a></p>
+    </section>
+
+    <!-- Windows -->
+    <section class="panel" data-os="win">
+      <div class="card">
+        <div class="step">1 · Open PowerShell</div>
+        <p class="hint">Press <b>⊞ Win</b>, type <b>PowerShell</b>, hit Enter.</p>
+      </div>
+      <div class="card">
+        <div class="step">2 · Paste this command</div>
+        <div class="cmd">
+          <span class="prompt">&gt;</span>
+          <code id="win-cmd">irm https://raw.githubusercontent.com/muzafferkadir/klyppr-desktop/main/install.ps1 | iex</code>
+          <button class="copy" data-target="win-cmd">Copy</button>
+        </div>
+        <p class="hint">Downloads and runs the latest signed installer. Launch <b>Klyppr</b> from the Start menu.</p>
+      </div>
+      <p class="alt">Or <a href="https://github.com/muzafferkadir/klyppr-desktop/releases/latest">download the .exe</a> manually.</p>
+    </section>
+
+    <p class="foot">
+      FFmpeg is downloaded by the app on first launch — nothing else to set up.<br />
+      <a href="https://github.com/muzafferkadir/klyppr-desktop">GitHub</a> · MIT License · by Muzaffer Kadir Yılmaz
+    </p>
+  </div>
+
+  <script>
+    // OS-based default tab.
+    const isWin = navigator.userAgent.includes('Windows');
+    const def = isWin ? 'win' : 'mac';
+    function show(os) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.os === os));
+      document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.dataset.os === os));
+    }
+    document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => show(t.dataset.os)));
+    show(def);
+
+    // Copy buttons.
+    document.querySelectorAll('.copy').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const text = document.getElementById(btn.dataset.target).textContent;
+        try {
+          await navigator.clipboard.writeText(text);
+          const old = btn.textContent;
+          btn.textContent = 'Copied!'; btn.classList.add('done');
+          setTimeout(() => { btn.textContent = old; btn.classList.remove('done'); }, 1500);
+        } catch { /* clipboard blocked */ }
+      });
+    });
+  </script>
+</body>
+</html>

@@ -12,7 +12,7 @@
 # a Gatekeeper prompt.
 
 cask "klyppr" do
-  version "3.0.0"
+  version "3.1.0"
 
   on_arm do
     sha256 "REPLACE_WITH_ARM_DMG_SHA256"

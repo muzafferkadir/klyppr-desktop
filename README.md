@@ -1,93 +1,87 @@
 # Klyppr Desktop
 
-> **📋 Latest (v2.0.0):** Windows build, native macOS UI, a new brand logo, format-preserving output (keeps your source codec / pixel format / audio), GPU acceleration for every quality preset, and a bundled static FFmpeg so it runs anywhere.
+> **📋 Latest (v3.1.0):** Rewritten in **Tauri 2 + Rust + Svelte 5**. Zoomable **waveform timeline** with live cut preview, terminal one-liner install (no App Store, no signing prompts), app-managed FFmpeg, and a self-updating build.
 
-This is the desktop version of [Klyppr](https://github.com/muzafferkadir/klyppr), a tool for editing video silence.
+Automatic video **silence cutter** — detects quiet gaps and removes them, keeping your source format. Desktop version of [Klyppr](https://github.com/muzafferkadir/klyppr).
+
+## Install
+
+### 🌐 One-click page
+
+**[install.klyppr — kurulum sayfası →](https://muzafferkadir.github.io/klyppr-desktop/)** (copy-paste the command for your OS)
+
+### 🍎 macOS (Apple Silicon & Intel)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/muzafferkadir/klyppr-desktop/main/install.sh | bash
+```
+
+Run it in **Terminal** (`⌘Space` → "Terminal"). Downloads the latest `.dmg`, installs **Klyppr.app** to `/Applications`, and clears quarantine so it opens without a Gatekeeper prompt. FFmpeg is fetched by the app on first launch.
+
+Homebrew (via tap):
+
+```sh
+brew install --cask muzafferkadir/tap/klyppr
+```
+
+### 🪟 Windows
+
+```powershell
+irm https://raw.githubusercontent.com/muzafferkadir/klyppr-desktop/main/install.ps1 | iex
+```
+
+Run it in **PowerShell** (Start → "PowerShell"). Downloads and runs the latest signed NSIS installer.
+
+### ⬇️ Manual
+
+Grab a `.dmg` / `.exe` from the **[latest release](https://github.com/muzafferkadir/klyppr-desktop/releases/latest)**.
 
 ## Features
 
-- Detect and remove silent parts from videos
-- **Native macOS look** — vibrancy, native window (hidden-inset title bar), grouped cards, system controls
-- **GPU hardware acceleration** — auto-detected VideoToolbox (macOS) / NVENC / QSV / AMF (off by default)
-- **Two-pass audio normalization** — YouTube-standard -16 LUFS
-- **Video quality presets** — Lossless, High, Medium, Fast
-- **Cancel any time** — stop processing mid-run
-- Drag & drop input, adjustable silence threshold / min duration / padding
-- Real-time progress with ETA, MP4-compatible output (`yuv420p`, AAC, faststart)
-- Bundled **static FFmpeg** — no system FFmpeg required
-- Supports many formats (mp4, mov, mkv, avi, webm, and more)
-
-## Installation
-
-**[⬇️ Download the latest release](https://github.com/muzafferkadir/klyppr-desktop/releases/latest)**
-
-### macOS (app not signed)
-
-1. Move **Klyppr** to your **Applications** folder.
-2. If macOS says the app "is damaged" or is from an unidentified developer:
-   - **System Settings → Privacy & Security → Open Anyway**, or run:
-     ```sh
-     xattr -rd com.apple.quarantine /Applications/Klyppr.app
-     ```
-3. Launch Klyppr.
+- **Zoomable waveform timeline** — see loudness, detected silence/cut regions, and a live playhead; scrub by clicking. Tune Threshold / Min. Silence / Padding and the cuts update instantly.
+- **Cut preview** — video playback skips the silence, so what you see is what you export.
+- Native **macOS** look (vibrancy, hidden-inset title bar) and a **Windows** build.
+- **GPU acceleration** — VideoToolbox / NVENC / QSV / AMF (auto-detected).
+- **Audio normalization** — YouTube-standard −16 LUFS.
+- **Quality presets** — Lossless / High / Medium / Fast, format-preserving output.
+- **Session persistence** — reopens your last video and settings; warns before quitting mid-process.
+- **Self-updating** — signed updater checks GitHub Releases.
+- App-managed **FFmpeg** — no system FFmpeg required, downloaded on first run.
 
 ## Usage
 
-1. Select (or drag & drop) your input video
-2. Choose an output folder
-3. Pick a preset — **Recommended** or **Aggressive** — or tune Advanced Settings:
-   - Silence Threshold (dB), Min. Silence (sec), Padding (sec)
-   - Video Quality: Lossless / High / Medium / Fast
-   - Normalize Audio (-16 LUFS), GPU Acceleration (if available)
-4. Click **Start Processing** (use **Cancel** to stop)
-5. Find your processed video in the output folder
+1. Drop (or select) a video — it's analyzed automatically.
+2. Pick a preset (**Recommended** / **Aggressive**) or tune Advanced Settings.
+3. Watch the timeline: cut regions and the "keep" duration update live.
+4. **Start Processing** (Cancel any time). Output lands in your chosen folder.
 
 ## Development
 
 ```bash
-yarn install
-yarn start
+pnpm install
+pnpm tauri dev     # run the app
+pnpm check         # type-check
 ```
 
-FFmpeg binaries are **not** committed (see `.gitignore`). Before building, place **static** `ffmpeg`/`ffprobe` in:
+Frontend: Svelte 5 + Vite (`src/`). Backend: Rust (`src-tauri/`). FFmpeg is downloaded at runtime — nothing to vendor.
 
-```
-bin/
-├── mac/   (ffmpeg, ffprobe — static arm64)
-└── win/   (ffmpeg.exe, ffprobe.exe)
-```
+## Release
 
-> Use **static** builds (e.g. from a trusted source). Dynamically-linked binaries copied from Homebrew will not run on other machines.
-
-## Building
+Tag a version and CI builds + drafts a GitHub Release for macOS (arm64 + x64) and Windows:
 
 ```bash
-yarn build:mac      # macOS .dmg
-yarn build:win64    # Windows 64-bit
-yarn build:win32    # Windows 32-bit
+git tag v3.1.0 && git push --tags
 ```
 
-Output goes to the `dist` directory.
-
-## What's New in v2.0.0
-
-- 🖥️ **Native macOS UI** — real vibrancy, hidden-inset title bar, grouped cards, native controls; window sized to content and quits on close
-- 🪟 **Windows build** — native installer (NSIS) with bundled FFmpeg
-- 🎨 **New brand logo** — used in-app (header) and as the app icon
-- 🎯 **Format-preserving output** — keeps the source's video codec, pixel format, and audio codec/bitrate (no forced re-format; fixes black-screen output on some players)
-- 🎮 **GPU acceleration for every quality preset** — VideoToolbox / NVENC / QSV / AMF (off by default)
-- 🔊 **Two-pass loudness normalization** for accurate -16 LUFS
-- 🧱 **Bundled static FFmpeg** — runs without a system FFmpeg
-- ⚙️ **spawn-based FFmpeg pipeline** (dropped `fluent-ffmpeg`), Cancel button, no-audio handling
-- 📱 **Responsive layout** — adapts down to half-screen widths
+Requires repo secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (see `.github/workflows/release.yml`).
 
 ## Tech
 
-Electron · FFmpeg (invoked directly via `child_process`) · Node.js
+Tauri 2 · Rust · Svelte 5 · Vite · FFmpeg (app-managed)
 
 ## Contributors
 
-Special thanks to [@parsherr](https://github.com/parsherr) for their contributions.
+Special thanks to [@parsherr](https://github.com/parsherr).
 
 ## Related
 
