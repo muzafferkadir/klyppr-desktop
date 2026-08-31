@@ -10,6 +10,7 @@
     useHardware = $bindable(),
     encoder,
     disabled = false,
+    compact = false,
   }: {
     silenceDb: number
     minSilence: number
@@ -19,6 +20,7 @@
     useHardware: boolean
     encoder: EncoderInfo
     disabled?: boolean
+    compact?: boolean
   } = $props()
 
   const presets = {
@@ -35,6 +37,7 @@
   }
 </script>
 
+<div class="sp" class:compact>
 <section class="card presets-section">
   <h3 class="section-title">
     <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
@@ -109,3 +112,17 @@
     </div>
   </div>
 </section>
+</div>
+
+<style>
+  /* Compact variant for the editor's narrow side column. */
+  .compact :global(.card) { padding: 12px; gap: 10px; }
+  .compact :global(.preset-btn) { padding: 7px 11px; }
+  .compact :global(.preset-desc) { display: none; }
+  .compact :global(.settings-grid) { gap: 8px; }
+  .compact :global(.number-input),
+  .compact :global(.select-input) { height: 34px; font-size: 14px; }
+  .compact :global(.form-label) { font-size: 11px; }
+  .compact :global(.checkbox-title) { font-size: 12px; }
+  .compact :global(.checkbox-desc) { font-size: 10.5px; }
+</style>

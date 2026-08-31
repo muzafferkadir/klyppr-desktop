@@ -234,7 +234,6 @@
           bind:outputPath
           {analysis}
           {encoder}
-          onLoadVideo={loadVideo}
           bind:silenceDb
           bind:minSilence
           bind:padding

@@ -6,14 +6,11 @@
   import SettingsPanel from './SettingsPanel.svelte'
   import type { AudioAnalysis, EncoderInfo, QualityPreset } from '../lib/tauri'
 
-  const VIDEO_EXTS = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'flv', 'ts', 'm4v', 'wmv', '3gp', 'mpg', 'mpeg', 'mts', 'vob']
-
   let {
     inputPath,
     outputPath = $bindable(),
     analysis,
     encoder,
-    onLoadVideo,
     silenceDb = $bindable(),
     minSilence = $bindable(),
     padding = $bindable(),
@@ -25,7 +22,6 @@
     outputPath: string
     analysis: AudioAnalysis
     encoder: EncoderInfo
-    onLoadVideo: (path: string) => void
     silenceDb: number
     minSilence: number
     padding: number
@@ -44,7 +40,6 @@
   let logExpanded = $state(false)
   let logBox = $state<HTMLDivElement | undefined>()
 
-  const bn = (p: string) => p.split(/[\\/]/).pop() ?? p
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
   function onTimeUpdate() {
@@ -54,17 +49,12 @@
     if (inCut) video.currentTime = inCut.end
   }
 
-  async function browseInput() {
-    const f = await open({ multiple: false, filters: [{ name: 'Video', extensions: VIDEO_EXTS }] })
-    if (typeof f === 'string') onLoadVideo(f)
-  }
-  async function pickOutput() {
-    const d = await open({ directory: true })
-    if (typeof d === 'string') outputPath = d
-  }
-
-  function startProcess() {
-    if (!outputPath) return
+  async function startProcess() {
+    if (!outputPath) {
+      const d = await open({ directory: true })
+      if (typeof d !== 'string') return
+      outputPath = d
+    }
     run({
       inputPath, outputDir: outputPath,
       silenceDb, minSilence, padding, quality, normalizeAudio, useHardware,
@@ -91,30 +81,7 @@
     </div>
 
     <aside class="side">
-      <section class="card">
-        <h3 class="section-title">
-          <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z" /><path d="M13 2v7h7" /></svg>
-          Files
-        </h3>
-        <div class="file-selection">
-          <div class="form-group">
-            <label class="form-label" for="ed-input">Input Video</label>
-            <div class="input-group">
-              <input id="ed-input" type="text" readonly value={bn(inputPath)} class="file-input" />
-              <button class="browse-btn" onclick={browseInput} disabled={job.running} data-tooltip="Choose another video"><span class="btn-text">Browse</span></button>
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="ed-output">Output Folder</label>
-            <div class="input-group">
-              <input id="ed-output" type="text" readonly value={outputPath ? bn(outputPath) : ''} placeholder="Select output folder..." class="file-input" />
-              <button class="browse-btn" onclick={pickOutput} disabled={job.running} data-tooltip="Browse for folder"><span class="btn-text">Browse</span></button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <SettingsPanel bind:silenceDb bind:minSilence bind:padding bind:quality bind:normalizeAudio bind:useHardware {encoder} disabled={job.running} />
+      <SettingsPanel compact bind:silenceDb bind:minSilence bind:padding bind:quality bind:normalizeAudio bind:useHardware {encoder} disabled={job.running} />
     </aside>
   </div>
 
@@ -127,7 +94,7 @@
       <button class="cancel-btn" onclick={cancel}><span class="btn-text">Cancel</span></button>
     </div>
   {:else}
-    <button class="start-btn" onclick={startProcess} disabled={!outputPath} data-tooltip={outputPath ? 'Process the video' : 'Select an output folder first'}>
+    <button class="start-btn" onclick={startProcess} data-tooltip="Process the video">
       <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4" /></svg>
       <span class="btn-text">{ranges.length ? `Process ${ranges.length} cut(s)` : 'Start Process'}</span>
     </button>
