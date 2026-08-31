@@ -8,7 +8,7 @@ Automatic video **silence cutter** — detects quiet gaps and removes them, keep
 
 ### 🌐 One-click page
 
-**[install.klyppr — kurulum sayfası →](https://muzafferkadir.github.io/klyppr-desktop/)** (copy-paste the command for your OS)
+**[klyppr.mkdir.dev →](https://klyppr.mkdir.dev)** (copy-paste the command for your OS)
 
 ### 🍎 macOS (Apple Silicon & Intel)
 
