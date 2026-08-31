@@ -43,8 +43,8 @@
 </div>
 
 <style>
-  .stage { display: flex; flex-direction: column; gap: 8px; }
-  .preview { position: relative; display: flex; justify-content: center; }
+  .stage { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
+  .preview { position: relative; flex: 1; min-height: 0; display: flex; justify-content: center; }
   .close {
     position: absolute; top: 8px; right: 8px; z-index: 2;
     width: 30px; height: 30px; border-radius: 999px;
@@ -52,7 +52,7 @@
     display: grid; place-items: center; cursor: pointer; opacity: 0.85;
   }
   .close:hover { opacity: 1; background: rgba(0, 0, 0, 0.75); }
-  video, .novideo { width: 100%; max-height: 70vh; aspect-ratio: 16 / 9; background: #000; border-radius: var(--radius-group); }
+  video, .novideo { width: 100%; height: 100%; min-height: 0; background: #000; border-radius: var(--radius-group); }
   video { object-fit: contain; }
   .novideo { display: grid; place-items: center; text-align: center; padding: 24px; color: var(--text-2); background: var(--field); }
   .meta { font-variant-numeric: tabular-nums; color: var(--text-2); font-size: 12px; }

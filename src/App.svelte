@@ -458,13 +458,35 @@
   }
   .update-bar button:disabled { opacity: 0.6; }
 
-  /* Always-on 2-column editor: video left, settings right. */
-  .editor-grid { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 16px; align-items: start; }
-  .video-col { min-width: 0; position: sticky; top: 0; }
-  .settings-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  /* Fixed 2-column app: left column (video + timeline + start + logs) is static,
+     no scroll — only the video row flexes with window height; the right options
+     column scrolls on its own. */
+  .main-content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 400px;
+    grid-template-rows: minmax(0, 1fr) auto auto auto auto;
+    grid-template-areas:
+      "video    options"
+      "timeline options"
+      "action   options"
+      "progress options"
+      "logs     options";
+    column-gap: 16px;
+    row-gap: 12px;
+    height: 100%;
+    overflow: hidden;
+    padding: 14px 18px 16px;
+  }
+  .editor-grid { display: contents; }
+  .video-col { grid-area: video; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  .settings-col { grid-area: options; display: flex; flex-direction: column; gap: 16px; min-width: 0; min-height: 0; overflow-y: auto; }
+  .timeline-bar { grid-area: timeline; }
+  :global(.main-content > .action-section) { grid-area: action; }
+  :global(.main-content > .progress-section) { grid-area: progress; }
+  :global(.main-content > .log-section) { grid-area: logs; }
   .sp-sep { height: 1px; background: var(--separator); margin: 4px 0; }
   .video-empty {
-    width: 100%; aspect-ratio: 16 / 9; max-height: 70vh;
+    width: 100%; flex: 1; min-height: 0;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
     background: var(--field); border: 1px dashed var(--border-strong); border-radius: var(--radius-group);
     color: var(--text-3); font-size: 13px; cursor: pointer; transition: border-color 0.15s, background 0.15s;
