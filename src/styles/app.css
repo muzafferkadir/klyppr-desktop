@@ -821,32 +821,23 @@ button:focus-visible {
 }
 
 /* ---------- Tooltips ---------- */
-[data-tooltip] {
-    position: relative;
-}
-
-[data-tooltip]::before {
-    content: attr(data-tooltip);
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%) translateY(-5px);
+/* Rendered as a single fixed element appended to <body> (see App.svelte) so
+   scrollable/overflow-hidden containers cannot clip it. */
+.tooltip-float {
+    position: fixed;
+    display: none;
     padding: 5px 9px;
+    max-width: 260px;
     background: #3a3a3c;
     color: var(--text);
     font-size: 11px;
     font-weight: 400;
+    line-height: 1.35;
     border-radius: 5px;
-    white-space: nowrap;
-    opacity: 0;
     pointer-events: none;
-    transition: opacity 0.1s ease;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-    z-index: 1000;
-}
-
-[data-tooltip]:hover::before {
-    opacity: 1;
+    transition: opacity 0.1s ease;
+    z-index: 10000;
 }
 
 /* ---------- Scrollbars ---------- */

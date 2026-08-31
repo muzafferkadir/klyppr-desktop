@@ -11,6 +11,7 @@
   import { getEncoderInfo, analyzeAudio, type QualityPreset, type AudioAnalysis } from './lib/tauri'
   import { computeSilence } from './lib/silence'
   import VideoStage from './components/VideoStage.svelte'
+  import Timeline from './components/Timeline.svelte'
 
   const logo = '/logo.png'
 
@@ -48,6 +49,8 @@
   let analysis = $state<AudioAnalysis | null>(null)
   let analyzing = $state(false)
   let dragOver = $state(false)
+  let currentTime = $state(0)
+  let stage = $state<VideoStage>()
 
   // Load a video into the editor: probe + analyze its audio, then show Editor.
   async function loadVideo(path: string) {
@@ -214,6 +217,34 @@
   onMount(() => {
     initJobEvents()
 
+    // Tooltip: a single fixed-positioned element so overflow containers can't clip it.
+    const tip = document.createElement('div')
+    tip.className = 'tooltip-float'
+    document.body.appendChild(tip)
+    const showTip = (el: HTMLElement) => {
+      const text = el.getAttribute('data-tooltip')
+      if (!text) return
+      tip.textContent = text
+      tip.style.opacity = '0'
+      tip.style.display = 'block'
+      const r = el.getBoundingClientRect()
+      const tr = tip.getBoundingClientRect()
+      let left = r.left + r.width / 2 - tr.width / 2
+      left = Math.max(6, Math.min(left, window.innerWidth - tr.width - 6))
+      let top = r.top - tr.height - 6
+      if (top < 6) top = r.bottom + 6 // flip below if no room above
+      tip.style.left = `${left}px`
+      tip.style.top = `${top}px`
+      tip.style.opacity = '1'
+    }
+    const hideTip = () => { tip.style.display = 'none' }
+    const onOver = (e: Event) => {
+      const el = (e.target as HTMLElement)?.closest('[data-tooltip]') as HTMLElement | null
+      if (el) showTip(el); else hideTip()
+    }
+    document.addEventListener('mouseover', onOver)
+    document.addEventListener('mouseout', hideTip)
+
     getEncoderInfo().then((info) => {
       encoder = info
       if (!info.available) useHardware = false // no GPU → off (else keep restored/default)
@@ -249,6 +280,9 @@
     })
 
     return () => {
+      document.removeEventListener('mouseover', onOver)
+      document.removeEventListener('mouseout', hideTip)
+      tip.remove()
       void unSetup.then((f) => f())
       void unDrag.then((f) => f())
       void unClose.then((f) => f())
@@ -287,7 +321,7 @@
           {#if analyzing}
             <div class="video-empty"><div class="spinner"></div>Analyzing audio…</div>
           {:else if analysis}
-            <VideoStage {inputPath} {analysis} {ranges} onReset={resetVideo} />
+            <VideoStage bind:this={stage} bind:currentTime {inputPath} {analysis} {ranges} onReset={resetVideo} />
           {:else}
             <button class="video-empty" class:drag-over={dragOver} onclick={pickInput}>
               <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /><path d="M12 11v6M9 14l3-3 3 3" /></svg>
@@ -298,6 +332,30 @@
 
         <!-- Right: files + presets + settings -->
         <div class="settings-col">
+          <div class="settings-top">
+          {#if job.running}
+            <div class="status-box">
+              <div class="status-row">
+                <span class="progress-label">Status</span>
+                <span class="progress-status">{statusText}</span>
+              </div>
+              <div class="progress-bar"><div class="progress-bar-fill" style="width:{Math.round(job.progress * 100)}%"></div></div>
+              {#if job.running}
+                <button class="cancel-btn status-cancel" onclick={cancel} data-tooltip="Cancel current processing">
+                  <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+                  <span class="btn-text">Cancel</span>
+                </button>
+              {/if}
+            </div>
+          {:else}
+            <button class="start-btn" disabled={!canStart} onclick={start} data-tooltip={canStart ? 'Start processing video' : 'Select a video first'}>
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4" /></svg>
+              <span class="btn-text">Start Processing</span>
+            </button>
+          {/if}
+          </div>
+
+          <div class="settings-scroll">
           <section class="card presets-section">
             <h3 class="section-title">
               <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
@@ -372,44 +430,9 @@
               </div>
             </div>
           </section>
-        </div>
-      </div>
 
-      {#if analysis}
-        <!-- P5: waveform timeline renders here -->
-        <div class="timeline-bar">timeline (waveform + cuts) — coming next</div>
-      {/if}
-
-      <section class="action-section">
-        {#if job.running}
-          <button class="cancel-btn" onclick={cancel} data-tooltip="Cancel current processing">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
-            <span class="btn-text">Cancel</span>
-          </button>
-        {:else}
-          <button class="start-btn" disabled={!canStart} onclick={start} data-tooltip={canStart ? 'Start processing video' : 'Select input and output first'}>
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4" /></svg>
-            <span class="btn-text">Start Processing</span>
-          </button>
-        {/if}
-      </section>
-
-      {#if job.running || job.result}
-        <section class="progress-section">
-          <div class="progress-container" style="display:block">
-            <div class="progress-info">
-              <span class="progress-label">Status</span>
-              <span class="progress-status">{statusText}</span>
-            </div>
-            <div class="progress-bar">
-              <div class="progress-bar-fill" style="width:{Math.round(job.progress * 100)}%"></div>
-            </div>
-          </div>
-        </section>
-      {/if}
-
-      {#if job.running || job.logs.length}
-        <section class="log-section">
+          {#if job.running || job.logs.length}
+            <section class="log-section">
           <div class="log-header">
             <button class="log-toggle" onclick={() => (logExpanded = !logExpanded)}>
               <span class="log-toggle-text">{logExpanded ? 'Hide' : 'Show'} Processing Logs</span>
@@ -428,6 +451,15 @@
             </div>
           {/if}
         </section>
+      {/if}
+          </div>
+        </div>
+      </div>
+
+      {#if analysis}
+        <div class="timeline-bar">
+          <Timeline {analysis} {ranges} {currentTime} onSeek={(t) => stage?.seek(t)} />
+        </div>
       {/if}
     </main>
   </div>
@@ -502,13 +534,10 @@
   .main-content {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 400px;
-    grid-template-rows: minmax(0, 1fr) auto auto auto auto;
+    grid-template-rows: minmax(0, 1fr) auto;
     grid-template-areas:
       "video    options"
-      "timeline options"
-      "action   options"
-      "progress options"
-      "logs     options";
+      "timeline options";
     column-gap: 16px;
     row-gap: 12px;
     height: 100%;
@@ -517,11 +546,16 @@
   }
   .editor-grid { display: contents; }
   .video-col { grid-area: video; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-  .settings-col { grid-area: options; display: flex; flex-direction: column; gap: 16px; min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; }
+  .settings-col { grid-area: options; display: flex; flex-direction: column; gap: 14px; min-width: 0; min-height: 0; overflow: hidden; }
+  .settings-top { flex-shrink: 0; }
+  .settings-scroll { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; overflow-x: hidden; }
   .timeline-bar { grid-area: timeline; }
-  :global(.main-content > .action-section) { grid-area: action; }
-  :global(.main-content > .progress-section) { grid-area: progress; }
-  :global(.main-content > .log-section) { grid-area: logs; }
+
+  /* Start/Status lives at the top of the options column. */
+  .status-box { background: var(--group); border: 1px solid var(--border); border-radius: var(--radius-group); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .status-box .status-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .status-box .progress-status { font-size: 12px; text-align: right; }
+  .status-cancel { width: 100%; height: 34px; }
   .sp-sep { height: 1px; background: var(--separator); margin: 4px 0; }
   .settings-grid { align-items: end; }
   .video-empty {
@@ -532,11 +566,7 @@
   }
   .video-empty:hover { border-color: var(--accent); color: var(--text-2); }
   .video-empty.drag-over { border-color: var(--accent); background: rgba(99, 102, 241, 0.08); color: var(--text); }
-  .timeline-bar {
-    height: 92px; display: grid; place-items: center;
-    background: var(--field); border: 1px solid var(--border); border-radius: var(--radius-group);
-    color: var(--text-3); font-size: 12px;
-  }
+  .timeline-bar { min-width: 0; }
 
   .video-empty .spinner {
     width: 26px; height: 26px;
