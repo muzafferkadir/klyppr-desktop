@@ -249,7 +249,7 @@
           {#if analyzing}
             <div class="video-empty"><div class="spinner"></div>Analyzing audio…</div>
           {:else if analysis}
-            <VideoStage {inputPath} {analysis} {ranges} />
+            <VideoStage {inputPath} {analysis} {ranges} onReset={resetVideo} />
           {:else}
             <button class="video-empty" class:drag-over={dragOver} onclick={pickInput}>
               <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /><path d="M12 11v6M9 14l3-3 3 3" /></svg>
