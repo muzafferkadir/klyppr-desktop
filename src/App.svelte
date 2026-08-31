@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
-  import { open } from '@tauri-apps/plugin-dialog'
+  import { open, ask } from '@tauri-apps/plugin-dialog'
   import { getCurrentWebview } from '@tauri-apps/api/webview'
   import { getCurrentWindow } from '@tauri-apps/api/window'
   import { revealItemInDir } from '@tauri-apps/plugin-opener'
@@ -30,7 +30,19 @@
   let quality = $state<QualityPreset>('lossless')
   let normalizeAudio = $state(true)
   let useHardware = $state(false)
-  let activePreset = $state<'recommended' | 'fast' | null>('recommended')
+
+  // A preset's ring lights up whenever the current values match it exactly.
+  function matchesPreset(name: 'recommended' | 'fast') {
+    const p = presets[name]
+    return (
+      Math.abs(silenceDb - p.silenceDb) < 0.5 &&
+      Math.abs(minSilence - p.minSilence) < 0.001 &&
+      Math.abs(padding - p.padding) < 0.001
+    )
+  }
+  const activePreset = $derived(
+    matchesPreset('recommended') ? 'recommended' : matchesPreset('fast') ? 'fast' : null,
+  )
 
   let encoder = $state({ available: false, name: '', description: '' })
   let analysis = $state<AudioAnalysis | null>(null)
@@ -99,9 +111,13 @@
   )
 
   const SETTINGS_KEY = 'klyppr-settings'
+  let restoredInput = ''
   function saveSettings() {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ silenceDb, minSilence, padding, quality, normalizeAudio, useHardware }))
+      localStorage.setItem(
+        SETTINGS_KEY,
+        JSON.stringify({ silenceDb, minSilence, padding, quality, normalizeAudio, useHardware, inputPath, outputPath }),
+      )
     } catch {}
   }
   function restoreSettings() {
@@ -114,12 +130,14 @@
       if (s.quality != null) quality = s.quality
       if (s.normalizeAudio != null) normalizeAudio = s.normalizeAudio
       if (s.useHardware != null) useHardware = s.useHardware
-      activePreset = null // saved values may not match a preset
+      if (s.outputPath) outputPath = s.outputPath
+      if (s.inputPath) restoredInput = s.inputPath // loaded in onMount
     } catch {}
   }
+  // Restore synchronously so the first autosave effect sees restored values.
+  restoreSettings()
 
   function applyPreset(name: 'recommended' | 'fast') {
-    activePreset = name
     const p = presets[name]
     silenceDb = p.silenceDb
     minSilence = p.minSilence
@@ -187,14 +205,22 @@
     if (logBox && logExpanded) logBox.scrollTop = logBox.scrollHeight
   })
 
+  // Autosave settings + paths on any change (after the top-level restore).
+  $effect(() => {
+    void [silenceDb, minSilence, padding, quality, normalizeAudio, useHardware, inputPath, outputPath]
+    saveSettings()
+  })
+
   onMount(() => {
     initJobEvents()
 
     getEncoderInfo().then((info) => {
       encoder = info
-      if (info.available) useHardware = true // GPU on by default when available
-      restoreSettings() // saved preference overrides the default
-    }).catch(() => restoreSettings())
+      if (!info.available) useHardware = false // no GPU → off (else keep restored/default)
+    }).catch(() => {})
+
+    // Resume the video that was open last session.
+    if (restoredInput) loadVideo(restoredInput)
 
     const unSetup = listen<{ phase: string; binary?: string; fraction?: number }>('ffmpeg-setup', (e) => {
       const p = e.payload
@@ -214,7 +240,19 @@
 
     check().then((u) => { if (u?.available) update = u }).catch(() => {})
 
-    return () => { void unSetup.then((f) => f()); void unDrag.then((f) => f()) }
+    // Warn before quitting mid-process.
+    const unClose = getCurrentWindow().onCloseRequested(async (e) => {
+      if (job.running) {
+        const quit = await ask('A video is still processing. Quit anyway?', { title: 'Klyppr', kind: 'warning' })
+        if (!quit) e.preventDefault()
+      }
+    })
+
+    return () => {
+      void unSetup.then((f) => f())
+      void unDrag.then((f) => f())
+      void unClose.then((f) => f())
+    }
   })
 </script>
 
