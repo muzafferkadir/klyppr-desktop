@@ -285,7 +285,7 @@
             <div class="settings-group visible">
               <div class="settings-grid">
                 <div class="form-group">
-                  <label class="form-label" for="silenceDb" data-tooltip="Lower values = more sensitive">Silence Threshold <span class="unit">dB</span></label>
+                  <label class="form-label" for="silenceDb" data-tooltip="Silence threshold — lower values detect quieter sound as silence">Threshold <span class="unit">dB</span></label>
                   <input id="silenceDb" type="number" bind:value={silenceDb} step="1" class="number-input" />
                 </div>
                 <div class="form-group">
@@ -485,6 +485,7 @@
   :global(.main-content > .progress-section) { grid-area: progress; }
   :global(.main-content > .log-section) { grid-area: logs; }
   .sp-sep { height: 1px; background: var(--separator); margin: 4px 0; }
+  .settings-grid { align-items: end; }
   .video-empty {
     width: 100%; flex: 1; min-height: 0;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
