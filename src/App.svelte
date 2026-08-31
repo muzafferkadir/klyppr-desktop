@@ -9,7 +9,8 @@
   import { relaunch } from '@tauri-apps/plugin-process'
   import { job, run, cancel, initJobEvents } from './lib/job.svelte'
   import { getEncoderInfo, analyzeAudio, type QualityPreset, type AudioAnalysis } from './lib/tauri'
-  import Editor from './components/Editor.svelte'
+  import { computeSilence } from './lib/silence'
+  import VideoStage from './components/VideoStage.svelte'
 
   const logo = '/logo.png'
 
@@ -64,6 +65,12 @@
   let updateBusy = $state(false)
 
   const canStart = $derived(!!inputPath && !!outputPath && !job.running)
+
+  // When a video is analyzed, cuts are computed client-side (live from settings)
+  // and sent to the backend so the preview matches the output exactly.
+  const ranges = $derived(
+    analysis ? computeSilence(analysis.envelopeDb, analysis.bucketMs, silenceDb, minSilence, padding) : [],
+  )
 
   const phaseLabel: Record<string, string> = {
     probe: 'Analyzing file', detect: 'Detecting silence', measure: 'Measuring loudness', encode: 'Encoding', verify: 'Verifying',
@@ -132,7 +139,10 @@
     saveSettings()
     showModal = false
     logExpanded = false
-    run({ inputPath, outputDir: outputPath, silenceDb, minSilence, padding, normalizeAudio, quality, useHardware })
+    run({
+      inputPath, outputDir: outputPath, silenceDb, minSilence, padding, normalizeAudio, quality, useHardware,
+      silenceRanges: analysis ? ranges.map((r) => [r.start, r.end] as [number, number]) : undefined,
+    })
   }
 
   async function copyLogs() {
@@ -227,23 +237,13 @@
       </div>
     {/if}
 
-    <main class="main-content" class:editing={analysis}>
-      {#if analysis}
-        <Editor
-          {inputPath}
-          bind:outputPath
-          {analysis}
-          {encoder}
-          bind:silenceDb
-          bind:minSilence
-          bind:padding
-          bind:quality
-          bind:normalizeAudio
-          bind:useHardware
-        />
-      {:else if analyzing}
+    <main class="main-content">
+      {#if analyzing}
         <div class="analyzing"><div class="spinner"></div>Analyzing audio…</div>
-      {:else}
+      {:else if analysis}
+        <VideoStage {inputPath} {analysis} {ranges} />
+      {/if}
+
       <div class="content-grid">
         <!-- Left: files & presets -->
         <div class="col col-left">
@@ -406,7 +406,6 @@
           {/if}
         </section>
       {/if}
-      {/if}
     </main>
   </div>
 </div>
@@ -474,7 +473,6 @@
   }
   .update-bar button:disabled { opacity: 0.6; }
 
-  .main-content.editing { padding: 0; overflow: hidden; }
   .analyzing {
     flex: 1;
     display: flex;
