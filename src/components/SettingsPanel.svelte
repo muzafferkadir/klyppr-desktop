@@ -124,10 +124,10 @@
   .compact :global(.settings-grid) { gap: 8px; }
   .compact :global(.number-input),
   .compact :global(.select-input) { height: 34px; font-size: 14px; }
-  /* Fix uneven rows: reserve two lines so "Silence Threshold" (which wraps)
-     lines up its input with the single-line "Min. Silence" / "Padding". */
-  .compact :global(.settings-grid) { align-items: start; }
-  .compact :global(.settings-grid .form-label) { min-height: 2.6em; align-items: flex-start; }
+  /* Align the three inputs on their bottom edge so the wrapping "Silence
+     Threshold" label doesn't push its input below the others. */
+  .compact :global(.settings-grid) { align-items: end; }
+  .compact :global(.settings-grid .form-label) { align-items: flex-start; }
   .compact :global(.form-label) { font-size: 11px; }
   .compact :global(.checkbox-title) { font-size: 12px; }
   .compact :global(.checkbox-desc) { font-size: 10.5px; }
