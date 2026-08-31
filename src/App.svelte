@@ -6,7 +6,7 @@
   import { getCurrentWindow } from '@tauri-apps/api/window'
   import { revealItemInDir } from '@tauri-apps/plugin-opener'
   import { check, type Update } from '@tauri-apps/plugin-updater'
-  import { relaunch } from '@tauri-apps/plugin-process'
+  import { relaunch, exit } from '@tauri-apps/plugin-process'
   import { job, run, cancel, initJobEvents } from './lib/job.svelte'
   import { getEncoderInfo, analyzeAudio, type QualityPreset, type AudioAnalysis } from './lib/tauri'
   import { computeSilence } from './lib/silence'
@@ -271,12 +271,14 @@
 
     check().then((u) => { if (u?.available) update = u }).catch(() => {})
 
-    // Warn before quitting mid-process.
+    // Warn before quitting mid-process, then fully quit the app (not just the window).
     const unClose = getCurrentWindow().onCloseRequested(async (e) => {
+      e.preventDefault() // we decide when to actually exit
       if (job.running) {
         const quit = await ask('A video is still processing. Quit anyway?', { title: 'Klyppr', kind: 'warning' })
-        if (!quit) e.preventDefault()
+        if (!quit) return
       }
+      await exit(0)
     })
 
     return () => {

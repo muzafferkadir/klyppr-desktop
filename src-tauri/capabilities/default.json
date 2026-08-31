@@ -12,6 +12,7 @@
     "dialog:allow-ask",
     "updater:default",
     "process:allow-restart",
+    "process:allow-exit",
     "core:app:default",
     "core:webview:default"
   ]

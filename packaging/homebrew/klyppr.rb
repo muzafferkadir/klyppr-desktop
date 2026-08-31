@@ -12,7 +12,7 @@
 # a Gatekeeper prompt.
 
 cask "klyppr" do
-  version "3.1.0"
+  version "3.1.1"
 
   # Universal build — one .dmg for Apple Silicon and Intel.
   sha256 "REPLACE_WITH_UNIVERSAL_DMG_SHA256"
