@@ -52,7 +52,22 @@ pub fn ffprobe_path(app: &AppHandle) -> AppResult<PathBuf> {
 /// Ensure ffmpeg + ffprobe are present in the app bin dir, downloading them on
 /// first launch. Idempotent: returns immediately when both already exist.
 /// Emits `ffmpeg-setup` events so the UI can show a one-time "preparing" state.
+/// On failure emits an `error` phase (with the message) so the UI can surface it
+/// instead of leaving the "preparing" overlay stuck forever.
 pub async fn ensure_ffmpeg(app: &AppHandle) -> AppResult<()> {
+    match ensure_ffmpeg_inner(app).await {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            let _ = app.emit(
+                SETUP_EVENT,
+                serde_json::json!({ "phase": "error", "message": e.to_string() }),
+            );
+            Err(e)
+        }
+    }
+}
+
+async fn ensure_ffmpeg_inner(app: &AppHandle) -> AppResult<()> {
     let dir = bin_dir(app)?;
     let ffmpeg = ffmpeg_path(app)?;
     let ffprobe = ffprobe_path(app)?;
@@ -91,8 +106,16 @@ async fn provision_one(app: &AppHandle, name: &str, spec: &Value, dest: &PathBuf
     let member = spec.get("member").and_then(Value::as_str);
     let expected_sha = spec.get("sha256").and_then(Value::as_str).filter(|s| *s != "TODO");
 
-    // Download the zip into memory with progress events.
-    let resp = reqwest::get(url)
+    // Download the zip into memory with progress events. A per-request timeout
+    // and connect timeout keep a stalled network from hanging the setup forever.
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .map_err(|e| AppError::Io(format!("http client: {e}")))?;
+    let resp = client
+        .get(url)
+        .send()
         .await
         .map_err(|e| AppError::Io(format!("download {name}: {e}")))?
         .error_for_status()

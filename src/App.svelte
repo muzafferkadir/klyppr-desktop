@@ -8,7 +8,7 @@
   import { check, type Update } from '@tauri-apps/plugin-updater'
   import { relaunch, exit } from '@tauri-apps/plugin-process'
   import { job, run, cancel, initJobEvents } from './lib/job.svelte'
-  import { getEncoderInfo, analyzeAudio, type QualityPreset, type AudioAnalysis } from './lib/tauri'
+  import { getEncoderInfo, analyzeAudio, ensureFfmpeg, type QualityPreset, type AudioAnalysis } from './lib/tauri'
   import { computeSilence } from './lib/silence'
   import VideoStage from './components/VideoStage.svelte'
   import Timeline from './components/Timeline.svelte'
@@ -75,9 +75,16 @@
   let showModal = $state(false)
 
   // ---- ffmpeg first-run download overlay + updater ----
-  let setup = $state({ preparing: false, fraction: 0, binary: '' })
+  let setup = $state({ preparing: false, fraction: 0, binary: '', error: '' })
   let update = $state<Update | null>(null)
   let updateBusy = $state(false)
+
+  function retrySetup() {
+    setup.error = ''
+    setup.fraction = 0
+    // The command emits its own `error` phase on failure; swallow the reject here.
+    ensureFfmpeg().catch(() => {})
+  }
 
   const canStart = $derived(!!inputPath && !job.running)
 
@@ -253,10 +260,11 @@
     // Resume the video that was open last session.
     if (restoredInput) loadVideo(restoredInput)
 
-    const unSetup = listen<{ phase: string; binary?: string; fraction?: number }>('ffmpeg-setup', (e) => {
+    const unSetup = listen<{ phase: string; binary?: string; fraction?: number; message?: string }>('ffmpeg-setup', (e) => {
       const p = e.payload
-      if (p.phase === 'ready') setup.preparing = false
-      else { setup.preparing = true; if (p.binary) setup.binary = p.binary; if (typeof p.fraction === 'number') setup.fraction = p.fraction }
+      if (p.phase === 'ready') { setup.preparing = false; setup.error = '' }
+      else if (p.phase === 'error') { setup.preparing = true; setup.error = p.message || 'FFmpeg setup failed.' }
+      else { setup.preparing = true; setup.error = ''; if (p.binary) setup.binary = p.binary; if (typeof p.fraction === 'number') setup.fraction = p.fraction }
     })
 
     const unDrag = getCurrentWebview().onDragDropEvent((e) => {
@@ -497,12 +505,25 @@
   <div class="modal" style="display:flex">
     <div class="modal-backdrop"></div>
     <div class="modal-content">
-      <div class="modal-icon" style="background:rgba(99,102,241,0.16);color:var(--accent)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8" /></svg>
-      </div>
-      <h2 class="modal-title">Preparing FFmpeg</h2>
-      <p class="modal-text">One-time download of the {setup.binary || 'video'} engine…</p>
-      <div class="progress-bar"><div class="progress-bar-fill" style="width:{Math.round(setup.fraction * 100)}%"></div></div>
+      {#if setup.error}
+        <div class="modal-icon" style="background:rgba(248,113,113,0.14);color:#f87171">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+        </div>
+        <h2 class="modal-title">FFmpeg Setup Failed</h2>
+        <p class="modal-text">Couldn't download the video engine. Check your internet connection and try again.</p>
+        <p class="modal-error">{setup.error}</p>
+        <div class="modal-buttons">
+          <button class="modal-btn modal-btn-primary" onclick={retrySetup}>Retry</button>
+          <button class="modal-btn modal-btn-secondary" onclick={() => (setup.preparing = false)}>Close</button>
+        </div>
+      {:else}
+        <div class="modal-icon" style="background:rgba(99,102,241,0.16);color:var(--accent)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8" /></svg>
+        </div>
+        <h2 class="modal-title">Preparing FFmpeg</h2>
+        <p class="modal-text">One-time download of the {setup.binary || 'video'} engine…</p>
+        <div class="progress-bar"><div class="progress-bar-fill" style="width:{Math.round(setup.fraction * 100)}%"></div></div>
+      {/if}
     </div>
   </div>
 {/if}

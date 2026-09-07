@@ -62,6 +62,7 @@ export const startJob = (request: JobRequest) => invoke<string>('start_job', { r
 export const cancelJob = (jobId: string) => invoke<boolean>('cancel_job', { jobId })
 export const probeMedia = (inputPath: string) => invoke<MediaInfo>('probe_media', { inputPath })
 export const ffprobeVersion = () => invoke<string>('ffprobe_version')
+export const ensureFfmpeg = () => invoke<void>('ensure_ffmpeg')
 
 /** Subscribe to backend job events. Returns an unlisten function. */
 export const onJobEvent = (cb: (e: JobEvent) => void): Promise<UnlistenFn> =>

@@ -782,6 +782,22 @@ button:focus-visible {
     line-height: 1.5;
 }
 
+.modal-error {
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #f87171;
+    background: rgba(248, 113, 113, 0.1);
+    border: 1px solid rgba(248, 113, 113, 0.25);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin: 0 0 16px;
+    max-height: 120px;
+    overflow-y: auto;
+    text-align: left;
+    word-break: break-word;
+    line-height: 1.45;
+}
+
 .modal-buttons {
     display: grid;
     grid-template-columns: 1fr 1fr;
