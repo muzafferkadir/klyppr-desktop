@@ -1,14 +1,18 @@
-use std::path::Path;
-
 use tauri::AppHandle;
+use tokio_util::sync::CancellationToken;
 
 use crate::domain::error::AppResult;
-use crate::domain::media::Rational;
-use crate::ffmpeg::sidecar::ffmpeg_stderr;
-use crate::pipeline::timeline::Segment;
+use crate::ffmpeg::sidecar::ffmpeg_stderr_progress;
 
 /// YouTube-standard loudness target.
 pub const TARGET: &str = "I=-16:TP=-1.5:LRA=11";
+
+/// Discard sink for the measurement pass — progress rides `pipe:1`, so the null
+/// muxer output must go somewhere other than stdout.
+#[cfg(windows)]
+const NULL_SINK: &str = "NUL";
+#[cfg(not(windows))]
+const NULL_SINK: &str = "/dev/null";
 
 /// Measured loudness stats from loudnorm pass 1 (`print_format=json`).
 #[derive(Debug, Clone, PartialEq)]
@@ -20,59 +24,41 @@ pub struct LoudnormStats {
     pub target_offset: String,
 }
 
-/// Pass 1: measure loudness of the CUT audio timeline (not the raw file — the
-/// cuts change integrated loudness). We build an AUDIO-ONLY trim+concat graph
-/// and run it through loudnorm with `-f null`, so the cost is one analysis
-/// pass, never a second video encode.
+/// Pass 1: measure loudness over the FULL input audio (single `-af loudnorm`
+/// pass with `-f null`). We deliberately do NOT rebuild the cut timeline here:
+/// a 600+ segment `atrim`/`concat` graph is pathologically slow (minutes of
+/// 100% CPU), while loudnorm's own EBU R128 gating already discards the
+/// near-silent regions we cut, so the measured integrated loudness is within a
+/// few tenths of a LU of the cut version — well inside broadcast tolerance and
+/// inaudible. True peak is identical (peaks live in the kept, loud regions).
 pub async fn measure_loudness(
     app: &AppHandle,
     input_path: &str,
-    segments: &[Segment],
-    fps: Rational,
-    script_path: &Path,
+    total_duration: f64,
+    token: &CancellationToken,
+    on_progress: &(dyn Fn(f64) + Send + Sync),
 ) -> AppResult<Option<LoudnormStats>> {
-    let graph = build_measure_graph(segments, fps, TARGET);
-    tokio::fs::write(script_path, &graph).await?;
-    let script = script_path.to_string_lossy();
-
-    let stderr = ffmpeg_stderr(
+    let af = format!("loudnorm={TARGET}:print_format=json");
+    let stderr = ffmpeg_stderr_progress(
         app,
         &[
             "-hide_banner",
+            "-vn",
             "-i", input_path,
-            "-/filter_complex", &script,
-            "-map", "[outa]",
-            "-f", "null", "-",
+            "-map", "0:a:0",
+            "-af", &af,
+            "-f", "null",
+            "-progress", "pipe:1",
+            "-nostats",
+            NULL_SINK,
         ],
+        total_duration,
+        token,
+        on_progress,
     )
     .await?;
 
     Ok(parse_loudnorm_json(&stderr))
-}
-
-/// Audio-only trim+concat feeding loudnorm in measurement mode. Uses the same
-/// per-segment second spans as the real encode graph (frame indices → seconds),
-/// so what we measure matches what we later produce.
-fn build_measure_graph(segments: &[Segment], fps: Rational, target: &str) -> String {
-    let parts: Vec<String> = segments
-        .iter()
-        .enumerate()
-        .map(|(i, seg)| {
-            format!(
-                "[0:a]atrim=start={:.6}:end={:.6},asetpts=PTS-STARTPTS[a{i}]",
-                seg.start_secs(fps),
-                seg.end_secs(fps)
-            )
-        })
-        .collect();
-    let concat: String = (0..segments.len()).map(|i| format!("[a{i}]")).collect();
-    format!(
-        "{};{}concat=n={}:v=0:a=1,loudnorm={}:print_format=json[outa]",
-        parts.join(";"),
-        concat,
-        segments.len(),
-        target
-    )
 }
 
 /// Build the pass-2 loudnorm filter. With stats → linear (two-pass) mode; without

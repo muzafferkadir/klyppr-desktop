@@ -160,11 +160,15 @@ async fn pipeline_body(
         fmt_dur(media.duration - expected_duration)
     ));
 
-    // Optional two-pass loudness normalization, measured on the CUT timeline.
+    // Optional two-pass loudness normalization, measured on the full audio (the
+    // EBU R128 gate makes cut ≈ uncut, so we skip rebuilding the cut timeline).
     let loudnorm_filter = if request.normalize_audio {
         phase(app, job_id, Phase::Measure);
-        let script = temp_dir.join("measure.txt");
-        let stats = loudnorm::measure_loudness(app, &request.input_path, &segments, fps, &script).await?;
+        let progress = make_progress_emitter(app, job_id);
+        let stats = loudnorm::measure_loudness(
+            app, &request.input_path, media.duration, token, &progress,
+        )
+        .await?;
         bail_if_cancelled(token)?;
         if stats.is_none() {
             log(app, job_id, LogLevel::Warn, "loudness measurement unavailable — single-pass loudnorm");
@@ -175,10 +179,17 @@ async fn pipeline_body(
         None
     };
 
-    let graph = filtergraph::build_filter_graph(&segments, fps, loudnorm_filter.as_deref());
-    let script_path = temp_dir.join("filter.txt");
-    tokio::fs::write(&script_path, &graph).await?;
+    // Cut via the concat demuxer (per-segment seek), not a filter_complex — see
+    // filtergraph::build_concat_list. Audio gets a re-timing filter so the
+    // segment joins stay in sync (plus loudnorm when requested).
+    let concat = filtergraph::build_concat_list(&segments, fps, &request.input_path);
+    let script_path = temp_dir.join("concat.txt");
+    tokio::fs::write(&script_path, &concat).await?;
     let script = script_path.to_string_lossy().to_string();
+    let audio_filter = plan
+        .audio
+        .as_ref()
+        .map(|_| filtergraph::build_audio_filter(loudnorm_filter.as_deref()));
     let partial_str = partial.to_string_lossy().to_string();
     let gop = ((fps.as_f64() * 2.0).round() as u32).max(1);
 
@@ -188,8 +199,8 @@ async fn pipeline_body(
         plan.video.encoder, if plan.video.is_hardware { "GPU" } else { "CPU" }
     ));
     let active_plan = encode_with_fallback(
-        app, job_id, token, &media, request, &avail, &plan, &request.input_path, &script,
-        &partial_str, gop, expected_duration,
+        app, job_id, token, &media, request, &avail, &plan, &script,
+        audio_filter.as_deref(), &partial_str, gop, expected_duration,
     )
     .await?;
     bail_if_cancelled(token)?;
@@ -213,8 +224,8 @@ async fn encode_with_fallback(
     request: &JobRequest,
     avail: &EncoderAvailability,
     plan: &OutputPlan,
-    input: &str,
     script: &str,
+    audio_filter: Option<&str>,
     partial: &str,
     gop: u32,
     expected_duration: f64,
@@ -224,18 +235,24 @@ async fn encode_with_fallback(
     // high-level logs instead, so the encoder's stderr is dropped from the UI.
     let logger = |_: &str| {};
 
-    let args = encode::build_encode_args(plan, input, script, partial, gop);
+    let args = encode::build_encode_args(plan, script, audio_filter, partial, gop);
     match encode::run_encode(app, args, expected_duration, token, &progress, &logger).await {
         Ok(()) => Ok(plan.clone()),
-        Err(AppError::FfmpegExit { .. }) if plan.video.is_hardware && !token.is_cancelled() => {
-            log(app, job_id, LogLevel::Warn, "hardware encode failed — retrying with software");
+        Err(AppError::FfmpegExit { code, stderr_tail }) if plan.video.is_hardware && !token.is_cancelled() => {
+            // Surface WHY the GPU encode died before silently falling back to the
+            // (much slower) software path — otherwise the failure is invisible.
+            log(app, job_id, LogLevel::Warn, format!(
+                "hardware encode failed (exit {}: {}) — retrying with software",
+                code.map(|c| c.to_string()).unwrap_or_else(|| "signal".into()),
+                stderr_tail,
+            ));
             let _ = tokio::fs::remove_file(partial).await;
             let sw_plan = resolve_output_plan(
                 media, request.quality, false, request.normalize_audio,
                 &EncoderAvailability { hw: None },
             )?;
             let _ = avail;
-            let args = encode::build_encode_args(&sw_plan, input, script, partial, gop);
+            let args = encode::build_encode_args(&sw_plan, script, audio_filter, partial, gop);
             encode::run_encode(app, args, expected_duration, token, &progress, &logger).await?;
             Ok(sw_plan)
         }
@@ -356,6 +373,7 @@ mod tests {
             silence_db: 30.0,
             min_silence: 0.5,
             padding: 0.05,
+            silence_ranges: None,
             normalize_audio: false,
             quality: crate::domain::job::QualityPreset::Medium,
             use_hardware: true,

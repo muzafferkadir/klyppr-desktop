@@ -10,27 +10,30 @@ use crate::domain::error::{AppError, AppResult};
 use crate::ffmpeg::provision::ffmpeg_path;
 use crate::pipeline::output_plan::OutputPlan;
 
-/// Assemble the ffmpeg argument list for the cut+concat encode. CFR is forced
-/// (`-r <rational> -fps_mode cfr`) so the concatenated output has one even frame
-/// grid; hvc1 tag and +faststart are applied only when the plan (ISO-BMFF) says
-/// so; the muxer is set explicitly so a `.partial.<uuid>.<ext>` temp path still
-/// muxes correctly.
+/// Assemble the ffmpeg argument list for the cut encode. The input is a concat-
+/// demuxer script (`-f concat -safe 0 -i <script>`) that seeks the source per
+/// kept segment — no filter_complex fan-out. CFR is forced (`-r <rational>
+/// -fps_mode cfr`) so the joined output has one even frame grid; `audio_filter`
+/// (segment-join re-timing + optional loudnorm) is applied via `-af`; hvc1 tag
+/// and +faststart are applied only when the plan (ISO-BMFF) says so; the muxer is
+/// set explicitly so a `.partial.<uuid>.<ext>` temp path still muxes correctly.
 pub fn build_encode_args(
     plan: &OutputPlan,
-    input_path: &str,
-    script_path: &str,
+    concat_path: &str,
+    audio_filter: Option<&str>,
     output_path: &str,
     gop: u32,
 ) -> Vec<String> {
     let mut a: Vec<String> = vec![
         "-hide_banner".into(),
-        "-i".into(), input_path.into(),
-        "-/filter_complex".into(), script_path.into(),
-        "-map".into(), "[outv]".into(),
+        "-f".into(), "concat".into(),
+        "-safe".into(), "0".into(),
+        "-i".into(), concat_path.into(),
+        "-map".into(), "0:v:0".into(),
     ];
     if plan.audio.is_some() {
         a.push("-map".into());
-        a.push("[outa]".into());
+        a.push("0:a:0".into());
     }
     a.push("-map_metadata".into());
     a.push("0".into());
@@ -53,6 +56,10 @@ pub fn build_encode_args(
     }
 
     if let Some(audio) = &plan.audio {
+        if let Some(af) = audio_filter {
+            a.push("-af".into());
+            a.push(af.into());
+        }
         a.push("-c:a".into());
         a.push(audio.encoder.clone());
         a.push("-b:a".into());
@@ -187,29 +194,33 @@ mod tests {
     }
 
     #[test]
-    fn args_have_cfr_and_muxer_and_progress() {
-        let a = build_encode_args(&plan(None, true, true), "in.mp4", "s.txt", "out.mp4", 60);
+    fn args_have_concat_input_cfr_muxer_and_progress() {
+        let a = build_encode_args(&plan(None, true, true), "list.txt", Some("aresample=async=1"), "out.mp4", 60);
         let j = a.join(" ");
+        assert!(j.contains("-f concat -safe 0 -i list.txt"));
+        assert!(j.contains("-map 0:v:0"));
+        assert!(j.contains("-map 0:a:0"));
+        assert!(j.contains("-af aresample=async=1"));
         assert!(j.contains("-r 30000/1001 -fps_mode cfr"));
         assert!(j.contains("-f mp4"));
         assert!(j.contains("-progress pipe:1 -nostats"));
         assert!(j.contains("-movflags +faststart"));
-        assert!(j.contains("-map [outa]"));
     }
 
     #[test]
     fn hvc1_only_when_tagged() {
-        let with = build_encode_args(&plan(Some("hvc1"), true, true), "i", "s", "o", 60).join(" ");
+        let with = build_encode_args(&plan(Some("hvc1"), true, true), "l", None, "o", 60).join(" ");
         assert!(with.contains("-tag:v hvc1"));
-        let without = build_encode_args(&plan(None, true, true), "i", "s", "o", 60).join(" ");
+        let without = build_encode_args(&plan(None, true, true), "l", None, "o", 60).join(" ");
         assert!(!without.contains("hvc1"));
     }
 
     #[test]
-    fn no_audio_omits_audio_map_and_codec() {
-        let a = build_encode_args(&plan(None, false, false), "i", "s", "o", 60).join(" ");
-        assert!(!a.contains("[outa]"));
+    fn no_audio_omits_audio_map_codec_and_filter() {
+        let a = build_encode_args(&plan(None, false, false), "l", Some("aresample=async=1"), "o", 60).join(" ");
+        assert!(!a.contains("0:a:0"));
         assert!(!a.contains("-c:a"));
+        assert!(!a.contains("-af"));
         assert!(!a.contains("+faststart"));
     }
 
