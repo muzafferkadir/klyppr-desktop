@@ -7,12 +7,12 @@
       "ffprobe": { "url": "https://www.osxexperts.net/ffprobe9arm.zip", "member": "ffprobe", "sha256": "e11c17e8200b3ee4c4c186d245e2b4053f01d56957336c1817fca0b997469106" }
     },
     "x86_64-apple-darwin": {
-      "ffmpeg": { "url": "https://evermeet.cx/ffmpeg/ffmpeg-9.0.1.zip", "member": "ffmpeg", "sha256": "TODO" },
-      "ffprobe": { "url": "https://evermeet.cx/ffmpeg/ffprobe-9.0.1.zip", "member": "ffprobe", "sha256": "TODO" }
+      "ffmpeg": { "url": "https://evermeet.cx/ffmpeg/ffmpeg-9.0.1.zip", "member": "ffmpeg", "sha256": "e27de05e3a9f9c758f9766d15d1a069fddeed5f725e35d9ab28683be4740dad7" },
+      "ffprobe": { "url": "https://evermeet.cx/ffmpeg/ffprobe-9.0.1.zip", "member": "ffprobe", "sha256": "a1508faa028bfb8e20c9d182c3d41fcff29ee7584ae21b2d6c357472a3ecbc24" }
     },
     "x86_64-pc-windows-msvc": {
-      "ffmpeg": { "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-gpl-9.0.zip", "member": "ffmpeg-n9.0-latest-win64-gpl-9.0/bin/ffmpeg.exe", "sha256": "TODO" },
-      "ffprobe": { "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-gpl-9.0.zip", "member": "ffmpeg-n9.0-latest-win64-gpl-9.0/bin/ffprobe.exe", "sha256": "TODO" }
+      "ffmpeg": { "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-gpl-9.0.zip", "member": "ffmpeg-n9.0-latest-win64-gpl-9.0/bin/ffmpeg.exe", "sha256": "f2350161365f28aa1b32865dfe4b53b8c2d15d27f1c7eb14335c1cc5dd7da0c1" },
+      "ffprobe": { "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-gpl-9.0.zip", "member": "ffmpeg-n9.0-latest-win64-gpl-9.0/bin/ffprobe.exe", "sha256": "2c016e510a1a50e8040e896ac2827861f67da79ea781768ab31f6d3cfd0838b8" }
     }
   }
 }
