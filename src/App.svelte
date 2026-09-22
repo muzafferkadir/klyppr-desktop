@@ -121,12 +121,11 @@
   )
 
   const SETTINGS_KEY = 'klyppr-settings'
-  let restoredInput = ''
   function saveSettings() {
     try {
       localStorage.setItem(
         SETTINGS_KEY,
-        JSON.stringify({ silenceDb, minSilence, padding, quality, normalizeAudio, useHardware, inputPath, outputPath }),
+        JSON.stringify({ silenceDb, minSilence, padding, quality, normalizeAudio, useHardware, outputPath }),
       )
     } catch {}
   }
@@ -141,7 +140,6 @@
       if (s.normalizeAudio != null) normalizeAudio = s.normalizeAudio
       if (s.useHardware != null) useHardware = s.useHardware
       if (s.outputPath) outputPath = s.outputPath
-      if (s.inputPath) restoredInput = s.inputPath // loaded in onMount
     } catch {}
   }
   // Restore synchronously so the first autosave effect sees restored values.
@@ -164,11 +162,10 @@
   }
 
   async function start() {
-    if (!outputPath) {
-      const d = await open({ directory: true })
-      if (typeof d !== 'string') return
-      outputPath = d
-    }
+    // Always ask where to save; cancelling the picker aborts the run.
+    const d = await open({ directory: true, defaultPath: outputPath || undefined })
+    if (typeof d !== 'string') return
+    outputPath = d
     saveSettings()
     showModal = false
     logExpanded = false
@@ -217,7 +214,7 @@
 
   // Autosave settings + paths on any change (after the top-level restore).
   $effect(() => {
-    void [silenceDb, minSilence, padding, quality, normalizeAudio, useHardware, inputPath, outputPath]
+    void [silenceDb, minSilence, padding, quality, normalizeAudio, useHardware, outputPath]
     saveSettings()
   })
 
@@ -256,9 +253,6 @@
       encoder = info
       if (!info.available) useHardware = false // no GPU → off (else keep restored/default)
     }).catch(() => {})
-
-    // Resume the video that was open last session.
-    if (restoredInput) loadVideo(restoredInput)
 
     const unSetup = listen<{ phase: string; binary?: string; fraction?: number; message?: string }>('ffmpeg-setup', (e) => {
       const p = e.payload
@@ -362,6 +356,9 @@
               <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4" /></svg>
               <span class="btn-text">Start Processing</span>
             </button>
+            {#if job.result && !job.result.ok && !job.result.cancelled}
+              <p class="start-error">Error: {job.result.error}</p>
+            {/if}
           {/if}
           </div>
 
@@ -550,6 +547,13 @@
     border-radius: var(--radius-field);
   }
   .update-bar button:disabled { opacity: 0.6; }
+  .start-error {
+    margin: 8px 0 0;
+    color: #ff6b6b;
+    font-size: 13px;
+    line-height: 1.4;
+    word-break: break-word;
+  }
 
   /* Fixed 2-column app: left column (video + timeline + start + logs) is static,
      no scroll — only the video row flexes with window height; the right options

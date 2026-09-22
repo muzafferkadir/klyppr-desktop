@@ -37,6 +37,14 @@ export function initJobEvents() {
 }
 
 function handle(e: JobEvent) {
+  // A job can emit its first event (even a terminal failure) before startJob's
+  // invoke promise resolves and sets currentId — the backend spawns the pipeline
+  // and returns the id concurrently. Adopt the id from the first event while a
+  // run is pending so that early event isn't dropped, leaving the UI stuck on
+  // "Starting process…". The backend guarantees a single running job at a time.
+  if (job.currentId === null && job.running) {
+    job.currentId = e.jobId
+  }
   // Ignore stray events from a previous job.
   if (e.jobId !== job.currentId) return
   switch (e.kind) {
