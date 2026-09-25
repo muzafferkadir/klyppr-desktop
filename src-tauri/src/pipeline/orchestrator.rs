@@ -15,6 +15,12 @@ use crate::pipeline::{encode, filtergraph, loudnorm, probe, silence, timeline, v
 const TEMP_ROOT: &str = ".klyppr_temp";
 const EVENT: &str = "job-event";
 
+/// At or below this many kept segments we cut with the frame-accurate
+/// `filter_complex` trim graph; above it we fall back to the concat demuxer,
+/// because the filter fan-out is O(frames × segments) and only stays fast for a
+/// few hundred cuts.
+const FILTER_MAX_SEGMENTS: usize = 400;
+
 fn emit(app: &AppHandle, ev: JobEvent) {
     let _ = app.emit(EVENT, ev);
 }
@@ -179,17 +185,40 @@ async fn pipeline_body(
         None
     };
 
-    // Cut via the concat demuxer (per-segment seek), not a filter_complex — see
-    // filtergraph::build_concat_list. Audio gets a re-timing filter so the
-    // segment joins stay in sync (plus loudnorm when requested).
-    let concat = filtergraph::build_concat_list(&segments, fps, &request.input_path);
-    let script_path = temp_dir.join("concat.txt");
-    tokio::fs::write(&script_path, &concat).await?;
-    let script = script_path.to_string_lossy().to_string();
-    let audio_filter = plan
-        .audio
-        .as_ref()
-        .map(|_| filtergraph::build_audio_filter(loudnorm_filter.as_deref()));
+    // Two cutting strategies (see encode::CutInput). Below the threshold we trim
+    // every segment off one continuous decode with a filter_complex graph, which
+    // is frame/sample accurate — this avoids the concat demuxer's open-GOP frame
+    // drops + audio inflation that otherwise trip the A/V-drift verify guard. The
+    // filter fan-out is O(frames × segments) though, so past the threshold we
+    // fall back to the fast per-segment-seek concat demuxer.
+    let has_audio = plan.audio.is_some();
+    let use_filter = segments.len() <= FILTER_MAX_SEGMENTS;
+
+    let mut script = String::new();
+    let mut audio_filter: Option<String> = None;
+    let mut filter_complex = String::new();
+    if use_filter {
+        filter_complex = filtergraph::build_trim_concat_filter(
+            &segments, fps, loudnorm_filter.as_deref(), has_audio,
+        );
+        log(app, job_id, LogLevel::Info, format!(
+            "Cutting {} clip(s) with frame-accurate trim", segments.len()
+        ));
+    } else {
+        let concat = filtergraph::build_concat_list(&segments, fps, &request.input_path);
+        let script_path = temp_dir.join("concat.txt");
+        tokio::fs::write(&script_path, &concat).await?;
+        script = script_path.to_string_lossy().to_string();
+        audio_filter = has_audio.then(|| filtergraph::build_audio_filter(loudnorm_filter.as_deref()));
+        log(app, job_id, LogLevel::Info, format!(
+            "Cutting {} clip(s) with concat demuxer (fast path, many cuts)", segments.len()
+        ));
+    }
+    let cut = if use_filter {
+        encode::CutInput::Filter { input: &request.input_path, filter_complex: &filter_complex }
+    } else {
+        encode::CutInput::Concat { script: &script, audio_filter: audio_filter.as_deref() }
+    };
     let partial_str = partial.to_string_lossy().to_string();
     let gop = ((fps.as_f64() * 2.0).round() as u32).max(1);
 
@@ -199,8 +228,8 @@ async fn pipeline_body(
         plan.video.encoder, if plan.video.is_hardware { "GPU" } else { "CPU" }
     ));
     let active_plan = encode_with_fallback(
-        app, job_id, token, &media, request, &avail, &plan, &script,
-        audio_filter.as_deref(), &partial_str, gop, expected_duration,
+        app, job_id, token, &media, request, &avail, &plan, &cut,
+        &partial_str, gop, expected_duration,
     )
     .await?;
     bail_if_cancelled(token)?;
@@ -224,8 +253,7 @@ async fn encode_with_fallback(
     request: &JobRequest,
     avail: &EncoderAvailability,
     plan: &OutputPlan,
-    script: &str,
-    audio_filter: Option<&str>,
+    cut: &encode::CutInput<'_>,
     partial: &str,
     gop: u32,
     expected_duration: f64,
@@ -235,7 +263,7 @@ async fn encode_with_fallback(
     // high-level logs instead, so the encoder's stderr is dropped from the UI.
     let logger = |_: &str| {};
 
-    let args = encode::build_encode_args(plan, script, audio_filter, partial, gop);
+    let args = encode::build_encode_args(plan, cut, partial, gop);
     match encode::run_encode(app, args, expected_duration, token, &progress, &logger).await {
         Ok(()) => Ok(plan.clone()),
         Err(AppError::FfmpegExit { code, stderr_tail }) if plan.video.is_hardware && !token.is_cancelled() => {
@@ -252,7 +280,7 @@ async fn encode_with_fallback(
                 &EncoderAvailability { hw: None },
             )?;
             let _ = avail;
-            let args = encode::build_encode_args(&sw_plan, script, audio_filter, partial, gop);
+            let args = encode::build_encode_args(&sw_plan, cut, partial, gop);
             encode::run_encode(app, args, expected_duration, token, &progress, &logger).await?;
             Ok(sw_plan)
         }

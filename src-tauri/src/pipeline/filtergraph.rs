@@ -62,6 +62,66 @@ fn escape_concat_path(path: &str) -> String {
     format!("'{}'", path.replace('\'', "'\\''"))
 }
 
+/// Build a frame-accurate `filter_complex` graph that trims each kept segment
+/// straight off the single decoded input and concats them, instead of seeking
+/// per segment with the concat demuxer. Each segment becomes a `trim`/`atrim`
+/// pair snapped to the segment's frame-derived second-span, `setpts`/`asetpts`
+/// reset every branch to a zero origin, and one `concat` joins them.
+///
+/// Why this exists alongside [`build_concat_list`]: the concat demuxer seeks to
+/// a keyframe per `inpoint`, which on OPEN-GOP HEVC drops the leading frames
+/// that reference the previous GOP (decoder logs `Could not find ref with POC`)
+/// AND emits whole-packet audio past `outpoint` — so video ends short while
+/// audio runs long and the A/V-drift verify guard trips. Trimming off one
+/// continuous decode is sample/frame exact (video and audio both cut at the
+/// same second-span), at the cost of an O(frames × segments) fan-out that only
+/// stays fast up to a few hundred cuts — hence the orchestrator uses this path
+/// below a segment threshold and falls back to the demuxer above it.
+///
+/// `loudnorm` (when requested) is applied on the concatenated audio, in-graph,
+/// so no separate `-af` is needed. With `has_audio == false` the graph carries
+/// video only.
+pub fn build_trim_concat_filter(
+    segments: &[Segment],
+    fps: Rational,
+    loudnorm: Option<&str>,
+    has_audio: bool,
+) -> String {
+    let mut g = String::new();
+    for (i, seg) in segments.iter().enumerate() {
+        let s = seg.start_secs(fps);
+        let e = seg.end_secs(fps);
+        g.push_str(&format!(
+            "[0:v]trim=start={s:.6}:end={e:.6},setpts=PTS-STARTPTS[v{i}];"
+        ));
+        if has_audio {
+            g.push_str(&format!(
+                "[0:a]atrim=start={s:.6}:end={e:.6},asetpts=PTS-STARTPTS[a{i}];"
+            ));
+        }
+    }
+
+    let n = segments.len();
+    for i in 0..n {
+        g.push_str(&format!("[v{i}]"));
+        if has_audio {
+            g.push_str(&format!("[a{i}]"));
+        }
+    }
+
+    if has_audio {
+        match loudnorm {
+            // concat's audio output can't be re-used as a filter input, so route
+            // it through an intermediate label before loudnorm.
+            Some(ln) => g.push_str(&format!("concat=n={n}:v=1:a=1[v][actmp];[actmp]{ln}[a]")),
+            None => g.push_str(&format!("concat=n={n}:v=1:a=1[v][a]")),
+        }
+    } else {
+        g.push_str(&format!("concat=n={n}:v=1:a=0[v]"));
+    }
+    g
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,6 +152,30 @@ mod tests {
         let fps = Rational { num: 30, den: 1 };
         let g = build_concat_list(&[seg(0, 30)], fps, "/tmp/a'b.mp4");
         assert!(g.contains("file '/tmp/a'\\''b.mp4'"));
+    }
+
+    #[test]
+    fn trim_filter_has_branches_and_concat() {
+        let fps = Rational { num: 30, den: 1 };
+        let g = build_trim_concat_filter(&[seg(0, 90), seg(150, 300)], fps, None, true);
+        assert!(g.contains("[0:v]trim=start=0.000000:end=3.000000,setpts=PTS-STARTPTS[v0];"));
+        assert!(g.contains("[0:a]atrim=start=5.000000:end=10.000000,asetpts=PTS-STARTPTS[a1];"));
+        assert!(g.ends_with("[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]"));
+    }
+
+    #[test]
+    fn trim_filter_appends_loudnorm_via_intermediate() {
+        let fps = Rational { num: 30, den: 1 };
+        let g = build_trim_concat_filter(&[seg(0, 90)], fps, Some("loudnorm=I=-16,aresample=48000"), true);
+        assert!(g.ends_with("concat=n=1:v=1:a=1[v][actmp];[actmp]loudnorm=I=-16,aresample=48000[a]"));
+    }
+
+    #[test]
+    fn trim_filter_video_only_when_no_audio() {
+        let fps = Rational { num: 30, den: 1 };
+        let g = build_trim_concat_filter(&[seg(0, 90)], fps, None, false);
+        assert!(!g.contains("atrim"));
+        assert!(g.ends_with("[v0]concat=n=1:v=1:a=0[v]"));
     }
 
     #[test]

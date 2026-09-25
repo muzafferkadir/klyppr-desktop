@@ -10,30 +10,58 @@ use crate::domain::error::{AppError, AppResult};
 use crate::ffmpeg::provision::ffmpeg_path;
 use crate::pipeline::output_plan::OutputPlan;
 
-/// Assemble the ffmpeg argument list for the cut encode. The input is a concat-
-/// demuxer script (`-f concat -safe 0 -i <script>`) that seeks the source per
-/// kept segment — no filter_complex fan-out. CFR is forced (`-r <rational>
-/// -fps_mode cfr`) so the joined output has one even frame grid; `audio_filter`
-/// (segment-join re-timing + optional loudnorm) is applied via `-af`; hvc1 tag
-/// and +faststart are applied only when the plan (ISO-BMFF) says so; the muxer is
-/// set explicitly so a `.partial.<uuid>.<ext>` temp path still muxes correctly.
+/// How the kept segments are fed to the encoder. Two strategies with identical
+/// output settings, chosen by the orchestrator on segment count:
+/// - `Concat`: a concat-demuxer script (`-f concat -safe 0 -i <script>`) that
+///   seeks the source per segment. Fast at any cut count, but mis-cuts OPEN-GOP
+///   HEVC (dropped video frames + inflated audio → A/V drift).
+/// - `Filter`: a `filter_complex` graph that trims every segment off one
+///   continuous decode (frame/sample accurate). Used below a segment threshold
+///   because the fan-out only stays fast up to a few hundred cuts.
+pub enum CutInput<'a> {
+    Concat { script: &'a str, audio_filter: Option<&'a str> },
+    Filter { input: &'a str, filter_complex: &'a str },
+}
+
+/// Assemble the ffmpeg argument list for the cut encode. CFR is forced (`-r
+/// <rational> -fps_mode cfr`) so the joined output has one even frame grid; hvc1
+/// tag and +faststart are applied only when the plan (ISO-BMFF) says so; the
+/// muxer is set explicitly so a `.partial.<uuid>.<ext>` temp path still muxes
+/// correctly. The input/mapping differs per [`CutInput`]: the concat path maps
+/// `0:v:0`/`0:a:0` and applies its re-timing `audio_filter` via `-af`, while the
+/// filter path maps the graph's `[v]`/`[a]` labels (loudnorm is already baked
+/// into the graph, so no `-af`).
 pub fn build_encode_args(
     plan: &OutputPlan,
-    concat_path: &str,
-    audio_filter: Option<&str>,
+    cut: &CutInput,
     output_path: &str,
     gop: u32,
 ) -> Vec<String> {
-    let mut a: Vec<String> = vec![
-        "-hide_banner".into(),
-        "-f".into(), "concat".into(),
-        "-safe".into(), "0".into(),
-        "-i".into(), concat_path.into(),
-        "-map".into(), "0:v:0".into(),
-    ];
-    if plan.audio.is_some() {
-        a.push("-map".into());
-        a.push("0:a:0".into());
+    let mut a: Vec<String> = vec!["-hide_banner".into()];
+    match cut {
+        CutInput::Concat { script, .. } => {
+            a.extend(["-f".into(), "concat".into(), "-safe".into(), "0".into()]);
+            a.push("-i".into());
+            a.push((*script).into());
+            a.push("-map".into());
+            a.push("0:v:0".into());
+            if plan.audio.is_some() {
+                a.push("-map".into());
+                a.push("0:a:0".into());
+            }
+        }
+        CutInput::Filter { input, filter_complex } => {
+            a.push("-i".into());
+            a.push((*input).into());
+            a.push("-filter_complex".into());
+            a.push((*filter_complex).into());
+            a.push("-map".into());
+            a.push("[v]".into());
+            if plan.audio.is_some() {
+                a.push("-map".into());
+                a.push("[a]".into());
+            }
+        }
     }
     a.push("-map_metadata".into());
     a.push("0".into());
@@ -56,9 +84,11 @@ pub fn build_encode_args(
     }
 
     if let Some(audio) = &plan.audio {
-        if let Some(af) = audio_filter {
+        // The concat path re-times audio across the segment joins via -af; the
+        // filter path already did its trimming (and loudnorm) inside the graph.
+        if let CutInput::Concat { audio_filter: Some(af), .. } = cut {
             a.push("-af".into());
-            a.push(af.into());
+            a.push((*af).into());
         }
         a.push("-c:a".into());
         a.push(audio.encoder.clone());
@@ -193,9 +223,13 @@ mod tests {
         }
     }
 
+    fn concat<'a>(script: &'a str, af: Option<&'a str>) -> CutInput<'a> {
+        CutInput::Concat { script, audio_filter: af }
+    }
+
     #[test]
     fn args_have_concat_input_cfr_muxer_and_progress() {
-        let a = build_encode_args(&plan(None, true, true), "list.txt", Some("aresample=async=1"), "out.mp4", 60);
+        let a = build_encode_args(&plan(None, true, true), &concat("list.txt", Some("aresample=async=1")), "out.mp4", 60);
         let j = a.join(" ");
         assert!(j.contains("-f concat -safe 0 -i list.txt"));
         assert!(j.contains("-map 0:v:0"));
@@ -208,20 +242,43 @@ mod tests {
     }
 
     #[test]
+    fn filter_input_maps_graph_labels_and_omits_af() {
+        let fc = "[0:v]trim=0:1,setpts=PTS-STARTPTS[v0];[0:a]atrim=0:1,asetpts=PTS-STARTPTS[a0];[v0][a0]concat=n=1:v=1:a=1[v][a]";
+        let a = build_encode_args(&plan(None, true, true), &CutInput::Filter { input: "in.mp4", filter_complex: fc }, "out.mp4", 60);
+        let j = a.join(" ");
+        assert!(j.contains("-i in.mp4"));
+        assert!(j.contains("-filter_complex"));
+        assert!(j.contains("-map [v]"));
+        assert!(j.contains("-map [a]"));
+        assert!(!j.contains("-af")); // loudnorm/trim already in the graph
+        assert!(!j.contains("-f concat"));
+        assert!(j.contains("-r 30000/1001 -fps_mode cfr"));
+    }
+
+    #[test]
     fn hvc1_only_when_tagged() {
-        let with = build_encode_args(&plan(Some("hvc1"), true, true), "l", None, "o", 60).join(" ");
+        let with = build_encode_args(&plan(Some("hvc1"), true, true), &concat("l", None), "o", 60).join(" ");
         assert!(with.contains("-tag:v hvc1"));
-        let without = build_encode_args(&plan(None, true, true), "l", None, "o", 60).join(" ");
+        let without = build_encode_args(&plan(None, true, true), &concat("l", None), "o", 60).join(" ");
         assert!(!without.contains("hvc1"));
     }
 
     #[test]
     fn no_audio_omits_audio_map_codec_and_filter() {
-        let a = build_encode_args(&plan(None, false, false), "l", Some("aresample=async=1"), "o", 60).join(" ");
+        let a = build_encode_args(&plan(None, false, false), &concat("l", Some("aresample=async=1")), "o", 60).join(" ");
         assert!(!a.contains("0:a:0"));
         assert!(!a.contains("-c:a"));
         assert!(!a.contains("-af"));
         assert!(!a.contains("+faststart"));
+    }
+
+    #[test]
+    fn filter_no_audio_omits_audio_map() {
+        let fc = "[0:v]trim=0:1,setpts=PTS-STARTPTS[v0];[v0]concat=n=1:v=1:a=0[v]";
+        let a = build_encode_args(&plan(None, false, false), &CutInput::Filter { input: "in.mp4", filter_complex: fc }, "o", 60).join(" ");
+        assert!(a.contains("-map [v]"));
+        assert!(!a.contains("-map [a]"));
+        assert!(!a.contains("-c:a"));
     }
 
     #[test]
