@@ -1,6 +1,6 @@
 # Klyppr Desktop
 
-> **📋 Latest (v3.1.0):** Rewritten in **Tauri 2 + Rust + Svelte 5**. Zoomable **waveform timeline** with live cut preview, terminal one-liner install (no App Store, no signing prompts), app-managed FFmpeg, and a self-updating build.
+> **📋 Latest (v3.1.8):** Rewritten in **Tauri 2 + Rust + Svelte 5**. Zoomable **waveform timeline** with live cut preview, terminal one-liner install (no App Store, no signing prompts), app-managed FFmpeg, and a self-updating build.
 
 Automatic video **silence cutter** — detects quiet gaps and removes them, keeping your source format. Desktop version of [Klyppr](https://github.com/muzafferkadir/klyppr).
 
@@ -17,12 +17,6 @@ curl -fsSL https://raw.githubusercontent.com/muzafferkadir/klyppr-desktop/main/i
 ```
 
 Run it in **Terminal** (`⌘Space` → "Terminal"). Downloads the latest `.dmg`, installs **Klyppr.app** to `/Applications`, and clears quarantine so it opens without a Gatekeeper prompt. FFmpeg is fetched by the app on first launch.
-
-Homebrew (via tap):
-
-```sh
-brew install --cask muzafferkadir/tap/klyppr
-```
 
 ### 🪟 Windows
 
@@ -67,10 +61,10 @@ Frontend: Svelte 5 + Vite (`src/`). Backend: Rust (`src-tauri/`). FFmpeg is down
 
 ## Release
 
-Tag a version and CI builds + drafts a GitHub Release for macOS (arm64 + x64) and Windows:
+Tag a version and CI builds + drafts a GitHub Release for macOS (universal) and Windows:
 
 ```bash
-git tag v3.1.0 && git push --tags
+git tag v3.1.8 && git push --tags
 ```
 
 Requires repo secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (see `.github/workflows/release.yml`).
