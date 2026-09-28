@@ -19,8 +19,9 @@
 
   const presets = {
     recommended: { silenceDb: -40, minSilence: 0.2, padding: 0.06 },
-    // Her eksende daha çok keser: daha geniş tespit + daha kısa duraklama + daha sıkı pay.
-    aggressive: { silenceDb: -30, minSilence: 0.12, padding: 0.025 },
+    // More cut on every axis, but never swallows speech: wider detection (-30),
+    // same minimum pause as Recommended, only a slightly tighter padding.
+    aggressive: { silenceDb: -30, minSilence: 0.2, padding: 0.05 },
   }
 
   // ---- settings state (legacy defaults) ----
