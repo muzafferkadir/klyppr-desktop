@@ -55,6 +55,6 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'Klyppr ${{ github.ref_name }}'
           releaseBody: 'Automatic video silence clipper. See the assets below to download.'
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}
