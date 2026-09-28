@@ -19,7 +19,8 @@
 
   const presets = {
     recommended: { silenceDb: -40, minSilence: 0.2, padding: 0.06 },
-    fast: { silenceDb: -30, minSilence: 0.4, padding: 0.035 },
+    // Her eksende daha çok keser: daha geniş tespit + daha kısa duraklama + daha sıkı pay.
+    aggressive: { silenceDb: -30, minSilence: 0.12, padding: 0.025 },
   }
 
   // ---- settings state (legacy defaults) ----
@@ -33,7 +34,7 @@
   let useHardware = $state(false)
 
   // A preset's ring lights up whenever the current values match it exactly.
-  function matchesPreset(name: 'recommended' | 'fast') {
+  function matchesPreset(name: 'recommended' | 'aggressive') {
     const p = presets[name]
     return (
       Math.abs(silenceDb - p.silenceDb) < 0.5 &&
@@ -42,7 +43,7 @@
     )
   }
   const activePreset = $derived(
-    matchesPreset('recommended') ? 'recommended' : matchesPreset('fast') ? 'fast' : null,
+    matchesPreset('recommended') ? 'recommended' : matchesPreset('aggressive') ? 'aggressive' : null,
   )
 
   let encoder = $state({ available: false, name: '', description: '' })
@@ -145,7 +146,7 @@
   // Restore synchronously so the first autosave effect sees restored values.
   restoreSettings()
 
-  function applyPreset(name: 'recommended' | 'fast') {
+  function applyPreset(name: 'recommended' | 'aggressive') {
     const p = presets[name]
     silenceDb = p.silenceDb
     minSilence = p.minSilence
@@ -373,7 +374,7 @@
                 <span class="preset-name">Recommended</span>
                 <span class="preset-desc">Balanced quality</span>
               </button>
-              <button class="preset-btn" class:active={activePreset === 'fast'} onclick={() => applyPreset('fast')} data-tooltip="Faster processing, more aggressive">
+              <button class="preset-btn" class:active={activePreset === 'aggressive'} onclick={() => applyPreset('aggressive')} data-tooltip="Cuts more: shorter pauses, tighter edges">
                 <span class="preset-name">Aggressive</span>
                 <span class="preset-desc">Tight detection</span>
               </button>
