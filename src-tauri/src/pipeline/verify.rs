@@ -7,11 +7,7 @@ use crate::domain::error::{AppError, AppResult};
 use crate::ffmpeg::sidecar::ffprobe;
 use crate::pipeline::output_plan::OutputPlan;
 
-/// Probe the produced file and assert it matches the plan: duration is close to
-/// what the cuts predicted, HEVC/ISO-BMFF outputs carry the `hvc1` tag, and the
-/// video/audio stream durations agree within a small tolerance (no drift). A
-/// failure here means we do NOT publish the file (the caller keeps the .partial
-/// and errors), so a broken encode never lands on the user's real output path.
+/// Probe the output and assert it matches the plan: duration, `hvc1` tag, and no A/V drift (else nothing is published).
 pub async fn verify_output(
     app: &AppHandle,
     output_path: &str,
@@ -48,8 +44,7 @@ fn check(root: &Value, plan: &OutputPlan, expected_duration: f64) -> AppResult<(
 
     let video = video.ok_or_else(|| AppError::OutputVerify("output has no video stream".into()))?;
 
-    // The plan expected audio but the output has none — a silent file must not
-    // be published as success.
+    // The plan expected audio but the output has none — a silent file must not be published as success.
     if plan.audio.is_some() && audio.is_none() {
         return Err(AppError::OutputVerify(
             "expected an audio stream but output has none".into(),
@@ -105,8 +100,7 @@ fn stream_duration(s: &Value) -> Option<f64> {
         .and_then(|d| d.parse::<f64>().ok())
 }
 
-/// Publish the finished file: rename the verified .partial onto the real output
-/// path. Same-directory rename so it's atomic on one filesystem.
+/// Publish the finished file: rename the verified .partial onto the real output path.
 pub async fn publish(partial: &Path, final_path: &Path) -> AppResult<()> {
     tokio::fs::rename(partial, final_path).await?;
     Ok(())

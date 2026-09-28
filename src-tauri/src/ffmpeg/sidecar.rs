@@ -10,8 +10,7 @@ use crate::domain::error::{AppError, AppResult};
 use crate::ffmpeg::provision::{ffmpeg_path, ffprobe_path};
 use crate::pipeline::encode::parse_progress;
 
-/// Keep the last few stderr lines for error messages (ffmpeg puts the real
-/// reason at the very end).
+/// Keep the last few stderr lines for error messages (ffmpeg puts the real reason at the very end).
 fn stderr_tail(stderr: &[u8]) -> String {
     let text = String::from_utf8_lossy(stderr);
     let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
@@ -19,8 +18,7 @@ fn stderr_tail(stderr: &[u8]) -> String {
     lines[start..].join(" | ")
 }
 
-/// Run a provisioned binary to completion, returning stdout. Used for short,
-/// buffered calls (ffprobe, `-version`).
+/// Run a provisioned binary to completion, returning stdout.
 async fn run_capture_stdout(bin: &Path, args: &[&str]) -> AppResult<String> {
     let output = Command::new(bin)
         .args(args)
@@ -43,8 +41,7 @@ pub async fn ffprobe(app: &AppHandle, args: &[&str]) -> AppResult<String> {
     run_capture_stdout(&ffprobe_path(app)?, args).await
 }
 
-/// Run ffmpeg to completion and return its STDERR (silencedetect, loudnorm json,
-/// and `-f null -` all report there and exit 0 on success).
+/// Run ffmpeg to completion and return its STDERR (silencedetect, loudnorm json, and `-f null -` all report there and exit 0 on success).
 pub async fn ffmpeg_stderr(app: &AppHandle, args: &[&str]) -> AppResult<String> {
     let output = Command::new(ffmpeg_path(app)?)
         .args(args)
@@ -62,11 +59,7 @@ pub async fn ffmpeg_stderr(app: &AppHandle, args: &[&str]) -> AppResult<String> 
     }
 }
 
-/// Run ffmpeg streaming its `-progress pipe:1` on stdout (parsed into a [0,1)
-/// fraction via `expected_duration`) while capturing the full stderr (for
-/// loudnorm's JSON block). Unlike [`ffmpeg_stderr`], this spawns a child and
-/// selects on `token`, so Cancel actually kills the process mid-run instead of
-/// waiting for it to finish. Returns the captured stderr on success.
+/// Stream ffmpeg's `-progress pipe:1` (parsed into a fraction) while capturing stderr.
 pub async fn ffmpeg_stderr_progress(
     app: &AppHandle,
     args: &[&str],
@@ -126,8 +119,7 @@ pub async fn ffmpeg_stderr_progress(
     }
 }
 
-/// First line of `ffprobe -version` — a smoke test that the provisioned binary
-/// is present and runnable.
+/// First line of `ffprobe -version` — a smoke test that the provisioned binary is present and runnable.
 pub async fn ffprobe_version(app: &AppHandle) -> AppResult<String> {
     let out = ffprobe(app, &["-version"]).await?;
     Ok(out.lines().next().unwrap_or("").to_string())

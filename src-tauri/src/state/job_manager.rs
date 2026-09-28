@@ -9,17 +9,14 @@ struct ActiveJob {
     token: CancellationToken,
 }
 
-/// Tracks the single in-flight job. Uses a std Mutex held only for the tiny
-/// critical sections below — never across an await — so the pipeline task can
-/// run freely while the lock is free.
+/// Tracks the single in-flight job.
 #[derive(Default)]
 pub struct JobManager {
     active: Mutex<Option<ActiveJob>>,
 }
 
 impl JobManager {
-    /// Claim the slot for `id`. Returns a fresh cancellation token, or `None`
-    /// if a job is already running (caller reports "busy").
+    /// Claim the slot for `id`.
     pub fn try_start(&self, id: JobId) -> Option<CancellationToken> {
         let mut slot = self.active.lock().unwrap();
         if slot.is_some() {
@@ -30,8 +27,7 @@ impl JobManager {
         Some(token)
     }
 
-    /// Cancel the active job iff its id matches. Returns whether anything was
-    /// cancelled (a stale/unknown id is a no-op → false).
+    /// Cancel the active job iff its id matches.
     pub fn cancel(&self, id: &JobId) -> bool {
         let slot = self.active.lock().unwrap();
         match &*slot {
@@ -43,8 +39,7 @@ impl JobManager {
         }
     }
 
-    /// Release the slot, but only if `id` still owns it — a finishing job must
-    /// not clear a newer job that took the slot after it.
+    /// Release the slot, but only if `id` still owns it — a finishing job must not clear a newer job that took the slot after it.
     pub fn finish(&self, id: &JobId) {
         let mut slot = self.active.lock().unwrap();
         if matches!(&*slot, Some(a) if &a.id == id) {

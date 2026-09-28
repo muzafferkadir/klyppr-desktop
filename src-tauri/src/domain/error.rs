@@ -1,8 +1,6 @@
 use serde::Serialize;
 
-/// Internal error type. Rich variants for the backend; converted to a stable
-/// `AppErrorDto` before crossing to the frontend so UI code never matches on
-/// wording. New variants are additive — never renumber `code`.
+/// Internal error type.
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error("invalid input: {0}")]
@@ -40,8 +38,7 @@ impl From<std::io::Error> for AppError {
     }
 }
 
-/// Stable wire shape handed to the frontend. `kind` is a machine-stable slug;
-/// `message` is human text (may change freely).
+/// Stable wire shape handed to the frontend.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppErrorDto {

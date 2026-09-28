@@ -14,8 +14,7 @@ use domain::media::MediaInfo;
 use pipeline::output_plan::HwEncoder;
 use state::job_manager::JobManager;
 
-/// App-wide shared state: the single-job manager and a lazily-detected,
-/// cached hardware-encoder result.
+/// App-wide shared state: the single-job manager and a lazily-detected, cached hardware-encoder result.
 #[derive(Default)]
 struct AppState {
     jobs: Arc<JobManager>,
@@ -56,8 +55,7 @@ async fn analyze_audio(
         .map_err(|e| e.to_dto())
 }
 
-/// Start processing. Returns a JobId immediately and runs the pipeline in the
-/// background, emitting `job-event`s. Rejects if a job is already running.
+/// Start processing.
 #[tauri::command]
 async fn start_job(
     app: AppHandle,

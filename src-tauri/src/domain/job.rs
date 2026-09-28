@@ -2,8 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::error::AppErrorDto;
 
-/// Opaque job handle. Every event carries it so the frontend can route
-/// progress even if we later allow more than one job.
+/// Opaque job handle.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct JobId(pub String);
 
@@ -39,8 +38,7 @@ pub enum LogLevel {
     Error,
 }
 
-/// The single event type emitted to the frontend (`serde` tagged union →
-/// TS discriminated union). One channel, one shape.
+/// The single event type emitted to the frontend (`serde` tagged union → TS discriminated union).
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum JobEvent {
@@ -77,9 +75,7 @@ pub struct JobRequest {
     pub normalize_audio: bool,
     pub quality: QualityPreset,
     pub use_hardware: bool,
-    /// Editor-provided silence spans (seconds) to cut. When present, the backend
-    /// skips its own silencedetect and uses these — so the preview and output
-    /// match exactly. `None` → automatic detection (the plain "Start" flow).
+    /// Editor-provided silence spans (seconds) to cut.
     #[serde(default)]
     pub silence_ranges: Option<Vec<[f64; 2]>>,
 }

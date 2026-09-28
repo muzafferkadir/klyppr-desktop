@@ -49,11 +49,7 @@ pub fn ffprobe_path(app: &AppHandle) -> AppResult<PathBuf> {
     Ok(bin_dir(app)?.join(exe("ffprobe")))
 }
 
-/// Ensure ffmpeg + ffprobe are present in the app bin dir, downloading them on
-/// first launch. Idempotent: returns immediately when both already exist.
-/// Emits `ffmpeg-setup` events so the UI can show a one-time "preparing" state.
-/// On failure emits an `error` phase (with the message) so the UI can surface it
-/// instead of leaving the "preparing" overlay stuck forever.
+/// Ensure ffmpeg + ffprobe are present in the app bin dir, downloading them on first launch.
 pub async fn ensure_ffmpeg(app: &AppHandle) -> AppResult<()> {
     match ensure_ffmpeg_inner(app).await {
         Ok(()) => Ok(()),
@@ -106,8 +102,7 @@ async fn provision_one(app: &AppHandle, name: &str, spec: &Value, dest: &PathBuf
     let member = spec.get("member").and_then(Value::as_str);
     let expected_sha = spec.get("sha256").and_then(Value::as_str).filter(|s| *s != "TODO");
 
-    // Download the zip into memory with progress events. A per-request timeout
-    // and connect timeout keep a stalled network from hanging the setup forever.
+    // Download the zip into memory with progress events.
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(30))
         .timeout(std::time::Duration::from_secs(300))
@@ -141,8 +136,7 @@ async fn provision_one(app: &AppHandle, name: &str, spec: &Value, dest: &PathBuf
         None => bytes,
     };
 
-    // Verify against the pinned hash when we have one; otherwise log the hash
-    // so it can be pinned (source is HTTPS + reputable, but pinning is the goal).
+    // Verify against the pinned hash when we have one; otherwise log it so it can be pinned.
     let actual = sha256_hex(&raw);
     match expected_sha {
         Some(sha) if sha != actual => {

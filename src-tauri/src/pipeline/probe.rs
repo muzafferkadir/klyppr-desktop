@@ -9,9 +9,7 @@ use crate::domain::media::{
 };
 use crate::ffmpeg::sidecar::ffprobe;
 
-/// Run ffprobe and build a validated `MediaInfo`. Chooses the primary video
-/// stream (skipping attached-pic / cover-art), collects every audio stream,
-/// and falls back to a stream duration when the container has none.
+/// Run ffprobe and build a validated `MediaInfo`.
 pub async fn probe(app: &AppHandle, input_path: &str) -> AppResult<MediaInfo> {
     let json = ffprobe(
         app,

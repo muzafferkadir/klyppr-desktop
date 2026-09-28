@@ -4,8 +4,7 @@ use tauri::AppHandle;
 use crate::domain::error::AppResult;
 use crate::ffmpeg::sidecar::ffmpeg_stdout_bytes;
 
-/// Low sample rate is plenty for a waveform + silence envelope, and keeps the
-/// decoded PCM small.
+/// Low sample rate is plenty for a waveform + silence envelope, and keeps the decoded PCM small.
 const SAMPLE_RATE: u32 = 8000;
 const BUCKET_MS: u32 = 25;
 /// dBFS floor for silent/empty buckets.

@@ -1,8 +1,6 @@
 use serde::Serialize;
 
-/// An exact frame rate as a rational (e.g. 30000/1001 for NTSC 29.97). Kept
-/// rational — never collapsed to f64 for filter args — so cut points snap to
-/// the true frame grid without NTSC rounding drift.
+/// An exact frame rate as a rational (e.g.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct Rational {
     pub num: u32,
@@ -44,8 +42,7 @@ pub enum VideoCodec {
     Mpeg4,
     ProRes,
     Mjpeg,
-    /// Anything we don't explicitly model — carried through, never silently
-    /// downgraded to H.264 (that was a legacy footgun).
+    /// Anything we don't explicitly model — carried through, never silently downgraded to H.264 (that was a legacy footgun).
     Unknown(String),
 }
 
@@ -116,9 +113,7 @@ pub struct VideoStream {
 }
 
 impl VideoStream {
-    /// The frame rate to build the CFR grid from: trust avg when r_frame_rate
-    /// is inflated (r > 1.5x avg), then clamp to a sane 5–240 range so a bogus
-    /// TS/AVI rate can't emit -r 90000 and blow up the encoder.
+    /// The frame rate to build the CFR grid from: trust avg when r_frame_rate is inflated (r > 1.5x avg), then clamp to a sane 5–240 range.
     pub fn effective_fps(&self) -> Rational {
         let r = self.r_frame_rate;
         let chosen = match self.avg_frame_rate {
@@ -212,8 +207,7 @@ pub struct AudioStream {
     pub bit_rate: Option<u32>,
 }
 
-/// Validated, immutable description of an input file. Built once by `probe`;
-/// downstream stages only read it.
+/// Validated, immutable description of an input file.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaInfo {

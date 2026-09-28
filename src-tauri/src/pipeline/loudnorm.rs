@@ -7,8 +7,7 @@ use crate::ffmpeg::sidecar::ffmpeg_stderr_progress;
 /// YouTube-standard loudness target.
 pub const TARGET: &str = "I=-16:TP=-1.5:LRA=11";
 
-/// Discard sink for the measurement pass — progress rides `pipe:1`, so the null
-/// muxer output must go somewhere other than stdout.
+/// Discard sink for the measurement pass — progress rides `pipe:1`, so the null muxer output must go somewhere other than stdout.
 #[cfg(windows)]
 const NULL_SINK: &str = "NUL";
 #[cfg(not(windows))]
@@ -24,13 +23,7 @@ pub struct LoudnormStats {
     pub target_offset: String,
 }
 
-/// Pass 1: measure loudness over the FULL input audio (single `-af loudnorm`
-/// pass with `-f null`). We deliberately do NOT rebuild the cut timeline here:
-/// a 600+ segment `atrim`/`concat` graph is pathologically slow (minutes of
-/// 100% CPU), while loudnorm's own EBU R128 gating already discards the
-/// near-silent regions we cut, so the measured integrated loudness is within a
-/// few tenths of a LU of the cut version — well inside broadcast tolerance and
-/// inaudible. True peak is identical (peaks live in the kept, loud regions).
+/// Pass 1: measure loudness over the FULL input audio (single `-af loudnorm` pass with `-f null`).
 pub async fn measure_loudness(
     app: &AppHandle,
     input_path: &str,
@@ -61,10 +54,7 @@ pub async fn measure_loudness(
     Ok(parse_loudnorm_json(&stderr))
 }
 
-/// Build the pass-2 loudnorm filter. With stats → linear (two-pass) mode; without
-/// → single-pass. Always appends `aresample` back to the source rate when known,
-/// because loudnorm internally upsamples to 192 kHz and would otherwise leave the
-/// output at 192 kHz.
+/// Always re-samples back to the source rate when known — loudnorm upsamples to 192 kHz internally.
 pub fn build_loudnorm_filter(stats: Option<&LoudnormStats>, resample_hz: Option<u32>) -> String {
     let mut f = match stats {
         Some(s) => format!(
@@ -90,9 +80,7 @@ pub fn parse_loudnorm_json(stderr: &str) -> Option<LoudnormStats> {
     let get = |k: &str| json.get(k).and_then(|v| v.as_str()).map(str::to_string);
     let input_i = get("input_i")?;
 
-    // Near-silent / empty audio measures as -inf (or absurdly low). Two-pass
-    // linear mode with that measurement produces broken gain, so treat it as
-    // "no usable measurement" and fall back to single-pass.
+    // Near-silent / empty audio measures as -inf (or absurdly low).
     match input_i.parse::<f64>() {
         Ok(v) if v.is_finite() && v > -70.0 => {}
         _ => return None,

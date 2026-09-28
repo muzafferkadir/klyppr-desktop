@@ -4,9 +4,6 @@ use crate::ffmpeg::sidecar::ffmpeg_stderr;
 use crate::pipeline::output_plan::HwEncoder;
 
 /// Detect a usable hardware encoder by actually running a 1-frame test encode.
-/// Listing an encoder in `-encoders` only means it was compiled in, not that a
-/// GPU/driver is present — a real encode is the reliable signal. Result is
-/// meant to be probed once and cached.
 pub async fn detect_hw_encoder(app: &AppHandle) -> Option<HwEncoder> {
     #[cfg(target_os = "macos")]
     {

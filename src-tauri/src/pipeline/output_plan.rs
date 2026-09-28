@@ -2,9 +2,7 @@ use crate::domain::error::{AppError, AppResult};
 use crate::domain::job::QualityPreset;
 use crate::domain::media::{MediaInfo, Rational, VideoCodec};
 
-/// Which GPU encoder family the host actually has (probed in the encode stage;
-/// passed in so this resolver stays pure and testable). v1 implements Apple
-/// VideoToolbox; the Windows families are placeholders wired up with CI.
+/// Which GPU encoder family the host actually has (probed in the encode stage; passed in so this resolver stays pure and testable).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))] // Nvenc/Qsv/Amf are Windows-only
 pub enum HwEncoder {
@@ -19,8 +17,7 @@ pub struct EncoderAvailability {
     pub hw: Option<HwEncoder>,
 }
 
-/// Output container, derived from the input extension (we keep the same
-/// container the file came in as).
+/// Output container, derived from the input extension (we keep the same container the file came in as).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Container {
     Mp4,
@@ -69,14 +66,11 @@ pub struct VideoEncodePlan {
 pub struct AudioEncodePlan {
     pub encoder: String,
     pub bitrate: String,
-    /// When the source rate is known, re-sample loudnorm's output back to it —
-    /// loudnorm internally upsamples to 192 kHz and would otherwise emit a
-    /// 192 kHz file. `None` when we don't know the rate.
+    /// When the source rate is known, re-sample loudnorm's output back to it — loudnorm internally upsamples to 192 kHz and would.
     pub resample_hz: Option<u32>,
 }
 
-/// Everything the encode stage needs, decided in ONE place. Nothing downstream
-/// re-derives codec/pix_fmt/tag choices.
+/// Everything the encode stage needs, decided in ONE place.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OutputPlan {
     pub container: Container,
@@ -91,8 +85,6 @@ pub struct OutputPlan {
 }
 
 /// Resolve the output plan from the input, request, and hardware availability.
-/// Pure and total: unsupported combinations return an error rather than a
-/// silent fallback (silent codec/pix_fmt swaps are how A/V bugs hide).
 pub fn resolve_output_plan(
     media: &MediaInfo,
     quality: QualityPreset,
@@ -106,8 +98,7 @@ pub fn resolve_output_plan(
         .as_ref()
         .ok_or_else(|| AppError::UnsupportedMedia("no video stream to encode".into()))?;
 
-    // Target video codec is container-driven; input codec only nudges the MP4/MOV
-    // and MKV choice. We never let "keep input codec" be the primary decision.
+    // Target video codec is container-driven; input codec only nudges the MP4/MOV and MKV choice.
     let target = target_video_codec(container, &video_stream.codec);
     let hw = if use_hardware { avail.hw } else { None };
     let video = build_video_plan(target, hw, quality);
@@ -164,13 +155,10 @@ fn target_video_codec(container: Container, input: &VideoCodec) -> TargetVideo {
 }
 
 fn build_video_plan(target: TargetVideo, hw: Option<HwEncoder>, quality: QualityPreset) -> VideoEncodePlan {
-    // v1: normalize every output to 8-bit yuv420p — maximum player compatibility
-    // (QuickTime included) and it keeps hardware encoders on their happy path.
-    // 10-bit / 4:2:2 passthrough is a deliberate later feature.
+    // v1: normalize every output to 8-bit yuv420p — maximum player compatibility (QuickTime included) and it keeps hardware encoders on.
     let pix_fmt = "yuv420p".to_string();
 
-    // Hardware only for H.264/HEVC on VideoToolbox in v1; everything else is
-    // software. VP9/AV1 stay software (libvpx/libsvtav1).
+    // Hardware only for H.264/HEVC on VideoToolbox in v1; everything else is software.
     if let (Some(HwEncoder::VideoToolbox), true) =
         (hw, matches!(target, TargetVideo::H264 | TargetVideo::Hevc))
     {
@@ -236,9 +224,7 @@ fn build_audio_plan(
     };
 
     let src = media.audios.first();
-    // Keep the source bitrate when it's a sane value, else a safe default.
-    // A reported 0 (or absurdly high) would otherwise produce "0k" / a failing
-    // encode. Cap at 320k — well above transparent for AAC/Opus.
+    // A reported 0 (or absurdly high) would otherwise produce "0k" / a failing encode.
     let bitrate = src
         .and_then(|a| a.bit_rate)
         .filter(|&b| b > 0)

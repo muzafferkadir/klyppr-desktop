@@ -10,10 +10,7 @@ pub struct SilenceRange {
     pub end: f64,
 }
 
-/// Run ffmpeg's silencedetect over the audio only (`-vn`, fast) and parse the
-/// stderr log into silent spans. A trailing `silence_start` with no matching
-/// `silence_end` (video ends in silence) is closed at `duration` so the tail
-/// silence is still removable.
+/// Run ffmpeg's silencedetect over the audio only (`-vn`, fast) and parse the stderr log into silent spans.
 pub async fn detect_silence(
     app: &AppHandle,
     input_path: &str,
@@ -56,8 +53,7 @@ pub fn parse_silence(stderr: &str, duration: f64) -> Vec<SilenceRange> {
     ranges
 }
 
-/// Extract the first float following `marker` on a line (silencedetect logs
-/// `silence_end: 15.67 | silence_duration: 3.3`).
+/// Extract the first float following `marker` on a line (silencedetect logs `silence_end: 15.67 | silence_duration: 3.3`).
 fn after(line: &str, marker: &str) -> Option<f64> {
     let rest = line.split_once(marker)?.1.trim_start();
     let token: String = rest
