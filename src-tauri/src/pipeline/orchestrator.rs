@@ -15,10 +15,7 @@ use crate::pipeline::{encode, filtergraph, loudnorm, probe, silence, timeline, v
 const TEMP_ROOT: &str = ".klyppr_temp";
 const EVENT: &str = "job-event";
 
-/// At or below this many kept segments we cut with the frame-accurate
-/// `filter_complex` trim graph; above it we fall back to the concat demuxer,
-/// because the filter fan-out is O(frames × segments) and only stays fast for a
-/// few hundred cuts.
+/// At or below this many kept segments we use the frame-exact trim graph; above it the concat demuxer.
 const FILTER_MAX_SEGMENTS: usize = 400;
 
 fn emit(app: &AppHandle, ev: JobEvent) {
@@ -41,9 +38,7 @@ fn bail_if_cancelled(token: &CancellationToken) -> AppResult<()> {
     }
 }
 
-/// Run the whole pipeline for one job. Emits Phase/Log/Progress events; the
-/// caller emits the terminal Finished/Failed/Cancelled. Returns the published
-/// output path on success. All temp/partial files are cleaned up on the way out.
+/// Run the whole pipeline for one job.
 pub async fn run_pipeline(
     app: &AppHandle,
     request: &JobRequest,
@@ -118,8 +113,7 @@ async fn pipeline_body(
         fmt_dur(media.duration), video.width, video.height, fps.as_f64()
     ));
 
-    // Editor supplies the cut ranges directly (preview == output); otherwise we
-    // detect them ourselves (the plain Start flow).
+    // Editor supplies the cut ranges directly (preview == output); otherwise we detect them ourselves (the plain Start flow).
     let silences = match &request.silence_ranges {
         Some(ranges) => {
             log(app, job_id, LogLevel::Info, format!("Using {} cut range(s) from the editor", ranges.len()));
@@ -149,8 +143,7 @@ async fn pipeline_body(
         log(app, job_id, LogLevel::Info, format!("  ✂ {} → {}", fmt_ts(s.start), fmt_ts(s.end)));
     }
 
-    // Editor ranges already include padding (computed client-side); don't apply
-    // it again. Auto-detected ranges get the requested padding.
+    // Editor ranges already include padding (computed client-side); don't apply it again.
     let padding = if request.silence_ranges.is_some() { 0.0 } else { request.padding };
     let segments = timeline::build_timeline(&silences, media.duration, padding, fps);
     if segments.is_empty() {
@@ -166,8 +159,7 @@ async fn pipeline_body(
         fmt_dur(media.duration - expected_duration)
     ));
 
-    // Optional two-pass loudness normalization, measured on the full audio (the
-    // EBU R128 gate makes cut ≈ uncut, so we skip rebuilding the cut timeline).
+    // Optional two-pass loudness normalization, measured on the full audio (the EBU R128 gate makes cut ≈ uncut, so we skip rebuilding.
     let loudnorm_filter = if request.normalize_audio {
         phase(app, job_id, Phase::Measure);
         let progress = make_progress_emitter(app, job_id);
@@ -185,22 +177,21 @@ async fn pipeline_body(
         None
     };
 
-    // Two cutting strategies (see encode::CutInput). Below the threshold we trim
-    // every segment off one continuous decode with a filter_complex graph, which
-    // is frame/sample accurate — this avoids the concat demuxer's open-GOP frame
-    // drops + audio inflation that otherwise trip the A/V-drift verify guard. The
-    // filter fan-out is O(frames × segments) though, so past the threshold we
-    // fall back to the fast per-segment-seek concat demuxer.
+    // Two cutting strategies (see encode::CutInput).
     let has_audio = plan.audio.is_some();
     let use_filter = segments.len() <= FILTER_MAX_SEGMENTS;
 
+    let sample_rate = media.audios.first().map(|a| a.sample_rate).unwrap_or(48_000);
     let mut script = String::new();
     let mut audio_filter: Option<String> = None;
-    let mut filter_complex = String::new();
     if use_filter {
-        filter_complex = filtergraph::build_trim_concat_filter(
-            &segments, fps, loudnorm_filter.as_deref(), has_audio,
+        // Graph into a FILE (`-/filter_complex <file>`): a few hundred segments overflow the command line (macOS ARG_MAX ≈ 1 MB) — same.
+        let graph = filtergraph::build_trim_concat_filter(
+            &segments, fps, loudnorm_filter.as_deref(), has_audio, sample_rate,
         );
+        let script_path = temp_dir.join("filter_script.txt");
+        tokio::fs::write(&script_path, &graph).await?;
+        script = script_path.to_string_lossy().to_string();
         log(app, job_id, LogLevel::Info, format!(
             "Cutting {} clip(s) with frame-accurate trim", segments.len()
         ));
@@ -215,7 +206,7 @@ async fn pipeline_body(
         ));
     }
     let cut = if use_filter {
-        encode::CutInput::Filter { input: &request.input_path, filter_complex: &filter_complex }
+        encode::CutInput::Filter { input: &request.input_path, script: &script }
     } else {
         encode::CutInput::Concat { script: &script, audio_filter: audio_filter.as_deref() }
     };
@@ -242,8 +233,7 @@ async fn pipeline_body(
     Ok(output_path.to_string())
 }
 
-/// Encode, and if a hardware encode fails, delete the partial and retry once
-/// with a software plan. Cancellation is never retried.
+/// Encode, and if a hardware encode fails, delete the partial and retry once with a software plan.
 #[allow(clippy::too_many_arguments)]
 async fn encode_with_fallback(
     app: &AppHandle,
@@ -259,16 +249,14 @@ async fn encode_with_fallback(
     expected_duration: f64,
 ) -> AppResult<OutputPlan> {
     let progress = make_progress_emitter(app, job_id);
-    // ffmpeg's raw stderr is noisy (stream mapping spam); we emit our own
-    // high-level logs instead, so the encoder's stderr is dropped from the UI.
+    // ffmpeg's raw stderr is noisy (stream mapping spam); we emit our own high-level logs instead, so the encoder's stderr is dropped from the UI.
     let logger = |_: &str| {};
 
     let args = encode::build_encode_args(plan, cut, partial, gop);
     match encode::run_encode(app, args, expected_duration, token, &progress, &logger).await {
         Ok(()) => Ok(plan.clone()),
         Err(AppError::FfmpegExit { code, stderr_tail }) if plan.video.is_hardware && !token.is_cancelled() => {
-            // Surface WHY the GPU encode died before silently falling back to the
-            // (much slower) software path — otherwise the failure is invisible.
+            // Surface WHY the GPU encode died before silently falling back to the (much slower) software path — otherwise the failure is invisible.
             log(app, job_id, LogLevel::Warn, format!(
                 "hardware encode failed (exit {}: {}) — retrying with software",
                 code.map(|c| c.to_string()).unwrap_or_else(|| "signal".into()),
@@ -288,8 +276,7 @@ async fn encode_with_fallback(
     }
 }
 
-/// Progress emitter throttled to ~100ms so a per-frame stream doesn't flood the
-/// frontend with events.
+/// Progress emitter throttled to ~100ms so a per-frame stream doesn't flood the frontend with events.
 fn make_progress_emitter(app: &AppHandle, job_id: &JobId) -> impl Fn(f64) + Send + Sync {
     let app = app.clone();
     let job_id = job_id.clone();
@@ -347,8 +334,7 @@ fn build_output_path(output_dir: &str, input_path: &str) -> String {
 }
 
 fn partial_path(output_dir: &str, output_path: &str, job_id: &JobId) -> PathBuf {
-    // Same directory as the final output so the publish rename is atomic; keep
-    // the real extension so ffmpeg's muxer autodetect still works.
+    // Same directory as the final output so the publish rename is atomic; keep the real extension so ffmpeg's muxer autodetect still works.
     let ext = Path::new(output_path).extension().and_then(|e| e.to_str()).unwrap_or("mp4");
     PathBuf::from(output_dir).join(format!(".klyppr.{}.partial.{}", job_id.0, ext))
 }
@@ -360,9 +346,7 @@ fn same_file(a: &str, b: &str) -> bool {
     }
 }
 
-/// Remove any leftover temp dirs / partial files from a crashed previous run in
-/// the given output directory. Only touches our own `.klyppr_temp` and
-/// `.klyppr.*.partial.*` names — never user files.
+/// Remove any leftover temp dirs / partial files from a crashed previous run in the given output directory.
 pub async fn clean_stale(output_dir: &Path) {
     let temp_root = output_dir.join(TEMP_ROOT);
     let _ = tokio::fs::remove_dir_all(&temp_root).await;

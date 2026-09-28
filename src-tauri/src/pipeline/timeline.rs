@@ -4,10 +4,7 @@ use crate::pipeline::silence::SilenceRange;
 /// Shortest talking span we bother keeping, in seconds.
 pub const MIN_SEGMENT_SECS: f64 = 0.05;
 
-/// A kept span of speech, addressed in whole frames so the trimmed VIDEO and
-/// AUDIO share the exact same length — the audio atrim and video trim are both
-/// derived from these frame indices, not from a decimal time, which is what
-/// prevents per-segment A/V drift from accumulating across cuts.
+/// A kept span of speech in whole frames, so trimmed video and audio share the exact same length.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Segment {
     pub start_frame: u64,
@@ -26,20 +23,36 @@ impl Segment {
     pub fn end_secs(&self, fps: Rational) -> f64 {
         self.end_frame as f64 * fps.den as f64 / fps.num as f64
     }
+
+    /// First audio sample of this span at `sample_rate`, in the SOURCE sample clock (absolute).
+    pub fn start_sample(&self, sample_rate: u32, fps: Rational) -> u64 {
+        frame_to_sample(self.start_frame, sample_rate, fps)
+    }
+
+    /// Last audio sample of this span (exclusive) at `sample_rate`.
+    pub fn end_sample(&self, sample_rate: u32, fps: Rational) -> u64 {
+        frame_to_sample(self.end_frame, sample_rate, fps)
+    }
 }
 
-/// Turn raw silence spans into the speech segments to keep. Order matters:
-/// pad → merge overlaps → complement → filter tiny → frame-snap → drop zero
-/// frame. Snapping is full-precision `round(t*fps)` (never toFixed), so NTSC
-/// rates don't round a frame off and reintroduce drift.
+/// `round(frame × sample_rate × fps.den / fps.num)` — u128 math, half-up rounding, no float anywhere.
+pub fn frame_to_sample(frame: u64, sample_rate: u32, fps: Rational) -> u64 {
+    let num = frame as u128 * sample_rate as u128 * fps.den as u128;
+    let den = fps.num as u128;
+    if den == 0 {
+        return 0;
+    }
+    ((num + den / 2) / den) as u64
+}
+
+/// Turn raw silence spans into the speech segments to keep.
 pub fn build_timeline(
     silences: &[SilenceRange],
     duration: f64,
     padding: f64,
     fps: Rational,
 ) -> Vec<Segment> {
-    // Pad each silence inward (keep a little speech around the cut), dropping
-    // spans that collapse to nothing once padded.
+    // Pad each silence inward (keep a little speech around the cut), dropping spans that collapse to nothing once padded.
     let mut padded: Vec<SilenceRange> = silences
         .iter()
         .map(|s| SilenceRange {
@@ -83,8 +96,7 @@ fn complement(silences: &[SilenceRange], duration: f64) -> Vec<(f64, f64)> {
     let mut talking = Vec::new();
     let mut cursor = 0.0_f64;
     for s in silences {
-        // Clamp to [0, duration] so a silence that runs past the end can't push
-        // a talking span past duration and inflate the expected output length.
+        // Clamp to [0, duration] so a silence that runs past the end can't push a talking span past duration and inflate the expected output length.
         let start = s.start.clamp(0.0, duration);
         if start > cursor {
             talking.push((cursor, start));
@@ -124,7 +136,6 @@ mod tests {
     #[test]
     fn merges_overlapping_padded_silences() {
         // Two silences that touch/overlap after padding collapse into one gap.
-        // padded: [2.05,3.95] and [3.95,5.95] → merge → [2.05,5.95].
         let sil = [
             SilenceRange { start: 2.0, end: 4.0 },
             SilenceRange { start: 3.9, end: 6.0 },
@@ -144,5 +155,37 @@ mod tests {
         ];
         let segs = build_timeline(&sil, 6.0, 0.0, fps30());
         assert!(segs.is_empty());
+    }
+
+    #[test]
+    fn frame_to_sample_is_exact_at_48k_30fps() {
+        let fps = Rational { num: 30, den: 1 };
+        assert_eq!(frame_to_sample(0, 48000, fps), 0);
+        assert_eq!(frame_to_sample(1, 48000, fps), 1600); // samples per frame
+        assert_eq!(frame_to_sample(30, 48000, fps), 48000); // 1 s
+        assert_eq!(frame_to_sample(150, 48000, fps), 240000); // 5 s
+        let s = Segment { start_frame: 150, end_frame: 300 };
+        assert_eq!(s.start_sample(48000, fps), 240000);
+        assert_eq!(s.end_sample(48000, fps), 480000);
+    }
+
+    #[test]
+    fn frame_to_sample_matches_the_exact_rational_position() {
+        // 44.1 kHz at NTSC rates rounds to the nearest sample of the exact position — it can never accumulate.
+        for fps in [
+            Rational { num: 30000, den: 1001 },
+            Rational { num: 30, den: 1 },
+            Rational { num: 60, den: 1 },
+            Rational { num: 24000, den: 1001 },
+        ] {
+            for frame in [0u64, 1, 29, 30, 150, 2997, 29970] {
+                let exact = frame as f64 * fps.den as f64 / fps.num as f64 * 44100.0;
+                let got = frame_to_sample(frame, 44100, fps) as f64;
+                assert!(
+                    (got - exact).abs() <= 0.5 + 1e-6,
+                    "frame={frame} fps={fps:?} got={got} exact={exact}"
+                );
+            }
+        }
     }
 }

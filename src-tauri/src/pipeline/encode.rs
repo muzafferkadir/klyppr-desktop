@@ -10,27 +10,13 @@ use crate::domain::error::{AppError, AppResult};
 use crate::ffmpeg::provision::ffmpeg_path;
 use crate::pipeline::output_plan::OutputPlan;
 
-/// How the kept segments are fed to the encoder. Two strategies with identical
-/// output settings, chosen by the orchestrator on segment count:
-/// - `Concat`: a concat-demuxer script (`-f concat -safe 0 -i <script>`) that
-///   seeks the source per segment. Fast at any cut count, but mis-cuts OPEN-GOP
-///   HEVC (dropped video frames + inflated audio → A/V drift).
-/// - `Filter`: a `filter_complex` graph that trims every segment off one
-///   continuous decode (frame/sample accurate). Used below a segment threshold
-///   because the fan-out only stays fast up to a few hundred cuts.
+/// How segments reach the encoder: `Concat` (fast seek, open-GOP drift) or `Filter` (frame-exact, slower past ~400 cuts).
 pub enum CutInput<'a> {
     Concat { script: &'a str, audio_filter: Option<&'a str> },
-    Filter { input: &'a str, filter_complex: &'a str },
+    Filter { input: &'a str, script: &'a str },
 }
 
-/// Assemble the ffmpeg argument list for the cut encode. CFR is forced (`-r
-/// <rational> -fps_mode cfr`) so the joined output has one even frame grid; hvc1
-/// tag and +faststart are applied only when the plan (ISO-BMFF) says so; the
-/// muxer is set explicitly so a `.partial.<uuid>.<ext>` temp path still muxes
-/// correctly. The input/mapping differs per [`CutInput`]: the concat path maps
-/// `0:v:0`/`0:a:0` and applies its re-timing `audio_filter` via `-af`, while the
-/// filter path maps the graph's `[v]`/`[a]` labels (loudnorm is already baked
-/// into the graph, so no `-af`).
+/// Assemble the ffmpeg argument list for the cut encode.
 pub fn build_encode_args(
     plan: &OutputPlan,
     cut: &CutInput,
@@ -50,11 +36,12 @@ pub fn build_encode_args(
                 a.push("0:a:0".into());
             }
         }
-        CutInput::Filter { input, filter_complex } => {
+        CutInput::Filter { input, script } => {
             a.push("-i".into());
             a.push((*input).into());
-            a.push("-filter_complex".into());
-            a.push((*filter_complex).into());
+            // The graph comes from a FILE: a few hundred segments overflow the command line (macOS ARG_MAX ≈ 1 MB).
+            a.push("-/filter_complex".into());
+            a.push((*script).into());
             a.push("-map".into());
             a.push("[v]".into());
             if plan.audio.is_some() {
@@ -84,8 +71,7 @@ pub fn build_encode_args(
     }
 
     if let Some(audio) = &plan.audio {
-        // The concat path re-times audio across the segment joins via -af; the
-        // filter path already did its trimming (and loudnorm) inside the graph.
+        // The concat path re-times audio across the segment joins via -af; the filter path already did its trimming (and loudnorm) inside the graph.
         if let CutInput::Concat { audio_filter: Some(af), .. } = cut {
             a.push("-af".into());
             a.push((*af).into());
@@ -114,9 +100,7 @@ pub fn build_encode_args(
     a
 }
 
-/// Fraction [0,1) parsed from an ffmpeg `-progress pipe:1` stdout line
-/// (`out_time_us=1234567`). Capped at 0.99 so completion is signalled by
-/// Terminated, not progress.
+/// Fraction [0,1) parsed from an ffmpeg `-progress pipe:1` stdout line (`out_time_us=1234567`).
 pub fn parse_progress(line: &str, expected_duration: f64) -> Option<f64> {
     let us: f64 = line.strip_prefix("out_time_us=")?.trim().parse().ok()?;
     if expected_duration <= 0.0 {
@@ -126,9 +110,7 @@ pub fn parse_progress(line: &str, expected_duration: f64) -> Option<f64> {
     Some(frac.clamp(0.0, 0.99))
 }
 
-/// Run the encode, streaming progress (stdout) and logs (stderr). Cancelling
-/// the token kills the child and drains to its Terminated event before
-/// returning `Cancelled`, so no zombie is left holding the output file.
+/// Run the encode, streaming progress (stdout) and logs (stderr).
 pub async fn run_encode(
     app: &AppHandle,
     args: Vec<String>,
@@ -243,11 +225,10 @@ mod tests {
 
     #[test]
     fn filter_input_maps_graph_labels_and_omits_af() {
-        let fc = "[0:v]trim=0:1,setpts=PTS-STARTPTS[v0];[0:a]atrim=0:1,asetpts=PTS-STARTPTS[a0];[v0][a0]concat=n=1:v=1:a=1[v][a]";
-        let a = build_encode_args(&plan(None, true, true), &CutInput::Filter { input: "in.mp4", filter_complex: fc }, "out.mp4", 60);
+        let a = build_encode_args(&plan(None, true, true), &CutInput::Filter { input: "in.mp4", script: "filter_script.txt" }, "out.mp4", 60);
         let j = a.join(" ");
         assert!(j.contains("-i in.mp4"));
-        assert!(j.contains("-filter_complex"));
+        assert!(j.contains("-/filter_complex filter_script.txt"));
         assert!(j.contains("-map [v]"));
         assert!(j.contains("-map [a]"));
         assert!(!j.contains("-af")); // loudnorm/trim already in the graph
@@ -274,8 +255,7 @@ mod tests {
 
     #[test]
     fn filter_no_audio_omits_audio_map() {
-        let fc = "[0:v]trim=0:1,setpts=PTS-STARTPTS[v0];[v0]concat=n=1:v=1:a=0[v]";
-        let a = build_encode_args(&plan(None, false, false), &CutInput::Filter { input: "in.mp4", filter_complex: fc }, "o", 60).join(" ");
+        let a = build_encode_args(&plan(None, false, false), &CutInput::Filter { input: "in.mp4", script: "filter_script.txt" }, "o", 60).join(" ");
         assert!(a.contains("-map [v]"));
         assert!(!a.contains("-map [a]"));
         assert!(!a.contains("-c:a"));
