@@ -13,7 +13,28 @@ use crate::pipeline::output_plan::{
 use crate::pipeline::{encode, filtergraph, loudnorm, probe, silence, timeline, verify};
 
 const TEMP_ROOT: &str = ".klyppr_temp";
+/// Older builds wrote their temp dir under this name (and into the output dir).
+const LEGACY_TEMP_ROOT: &str = ".klypprdata";
 const EVENT: &str = "job-event";
+
+/// Job temp dirs live in the OS temp dir — never in the user's output folder.
+fn temp_root() -> PathBuf {
+    std::env::temp_dir().join("klyppr")
+}
+
+/// Remove a file or dir, logging anything other than "already gone".
+async fn cleanup_path(path: &Path, app: &AppHandle, job_id: &JobId) {
+    let res = if path.is_dir() {
+        tokio::fs::remove_dir_all(path).await
+    } else {
+        tokio::fs::remove_file(path).await
+    };
+    if let Err(e) = res {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            log(app, job_id, LogLevel::Warn, format!("could not remove {}: {e}", path.display()));
+        }
+    }
+}
 
 /// At or below this many kept segments we use the frame-exact trim graph; above it the concat demuxer.
 const FILTER_MAX_SEGMENTS: usize = 400;
@@ -56,19 +77,21 @@ pub async fn run_pipeline(
         ));
     }
 
-    // Sweep leftovers from any crashed previous run in this output dir first.
-    clean_stale(Path::new(&request.output_dir)).await;
+    // Sweep leftovers from any crashed previous run first (ours + legacy locations).
+    clean_stale(Path::new(&request.output_dir), app, job_id).await;
 
-    let temp_dir = PathBuf::from(&request.output_dir).join(TEMP_ROOT).join(&job_id.0);
+    let temp_dir = temp_root().join(&job_id.0);
     tokio::fs::create_dir_all(&temp_dir).await?;
     let partial = partial_path(&request.output_dir, &output_path, job_id);
 
     // Everything below runs under a guard that always cleans up temp + partial.
     let result = pipeline_body(app, request, job_id, token, hw, &output_path, &temp_dir, &partial).await;
 
-    let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+    cleanup_path(&temp_dir, app, job_id).await;
+    // The parent is ours too: drop it so an empty `klyppr` dir never lingers in the temp root.
+    let _ = tokio::fs::remove_dir(temp_root()).await;
     if result.is_err() {
-        let _ = tokio::fs::remove_file(&partial).await;
+        cleanup_path(&partial, app, job_id).await;
     }
     result
 }
@@ -262,7 +285,7 @@ async fn encode_with_fallback(
                 code.map(|c| c.to_string()).unwrap_or_else(|| "signal".into()),
                 stderr_tail,
             ));
-            let _ = tokio::fs::remove_file(partial).await;
+            cleanup_path(Path::new(partial), app, job_id).await;
             let sw_plan = resolve_output_plan(
                 media, request.quality, false, request.normalize_audio,
                 &EncoderAvailability { hw: None },
@@ -346,16 +369,20 @@ fn same_file(a: &str, b: &str) -> bool {
     }
 }
 
-/// Remove any leftover temp dirs / partial files from a crashed previous run in the given output directory.
-pub async fn clean_stale(output_dir: &Path) {
-    let temp_root = output_dir.join(TEMP_ROOT);
-    let _ = tokio::fs::remove_dir_all(&temp_root).await;
+/// Remove leftovers from crashed runs: our OS-temp root, the legacy in-output-dir temp folders, and stray `.partial` files.
+pub async fn clean_stale(output_dir: &Path, app: &AppHandle, job_id: &JobId) {
+    // Recreated on demand by the next job.
+    let _ = tokio::fs::remove_dir_all(temp_root()).await;
+    // Legacy builds put their temp dir INSIDE the user's output folder.
+    for legacy in [TEMP_ROOT, LEGACY_TEMP_ROOT] {
+        cleanup_path(&output_dir.join(legacy), app, job_id).await;
+    }
     if let Ok(mut rd) = tokio::fs::read_dir(output_dir).await {
         while let Ok(Some(entry)) = rd.next_entry().await {
             let name = entry.file_name();
             let name = name.to_string_lossy();
             if name.starts_with(".klyppr.") && name.contains(".partial.") {
-                let _ = tokio::fs::remove_file(entry.path()).await;
+                cleanup_path(&entry.path(), app, job_id).await;
             }
         }
     }
@@ -375,6 +402,16 @@ mod tests {
     fn partial_keeps_extension_and_dir() {
         let p = partial_path("/out", "/out/processed_clip.mkv", &JobId("abc".into()));
         assert_eq!(p, PathBuf::from("/out/.klyppr.abc.partial.mkv"));
+    }
+
+    #[test]
+    fn job_temp_lives_in_the_os_temp_dir() {
+        let t = temp_root();
+        assert!(t.starts_with(std::env::temp_dir()), "{t:?}");
+        assert!(t.ends_with("klyppr"), "{t:?}");
+        // Never inside a user output folder.
+        assert_ne!(t, PathBuf::from(TEMP_ROOT));
+        assert_ne!(t, PathBuf::from(LEGACY_TEMP_ROOT));
     }
 
     #[test]
